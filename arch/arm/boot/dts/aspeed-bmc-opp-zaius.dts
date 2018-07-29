@@ -434,3 +434,5 @@
 &ibt {
 	status = "okay";
 };
+
+#include "ibm-power9-dual.dtsi"
