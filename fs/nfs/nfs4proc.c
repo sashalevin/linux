@@ -581,8 +581,15 @@ nfs4_async_handle_exception(struct rpc_task *task, struct nfs_server *server,
 		ret = -EIO;
 	return ret;
 out_retry:
-	if (ret == 0)
+	if (ret == 0) {
 		exception->retry = 1;
+		/*
+		 * For NFS4ERR_MOVED, the client transport will need to
+		 * be recomputed after migration recovery has completed.
+		 */
+		if (errorcode == -NFS4ERR_MOVED)
+			rpc_task_release_transport(task);
+	}
 	return ret;
 }
 
@@ -1773,6 +1780,10 @@ nfs4_opendata_check_deleg(struct nfs4_opendata *data, struct nfs4_state *state)
 				data->o_res.delegation_type,
 				&data->o_res.delegation,
 				data->o_res.pagemod_limit);
+
+	if (data->o_res.do_recall)
+		nfs_async_inode_return_delegation(state->inode,
+						  &data->o_res.delegation);
 }
 
 /*
