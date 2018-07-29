@@ -178,13 +178,18 @@
 				pins = "GPIO_12", "GPIO_13";
 				function = "uart2";
 			};
+
+			miim1: miim1 {
+				pins = "GPIO_14", "GPIO_15";
+				function = "miim1";
+			};
 		};
 
 		mdio0: mdio@107009c {
 			#address-cells = <1>;
 			#size-cells = <0>;
 			compatible = "mscc,ocelot-miim";
-			reg = <0x107009c 0x36>, <0x10700f0 0x8>;
+			reg = <0x107009c 0x24>, <0x10700f0 0x8>;
 			interrupts = <14>;
 			status = "disabled";
 
@@ -200,6 +205,17 @@
 			phy3: ethernet-phy@3 {
 				reg = <3>;
 			};
+		};
+
+		mdio1: mdio@10700c0 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "mscc,ocelot-miim";
+			reg = <0x10700c0 0x24>;
+			interrupts = <15>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&miim1>;
+			status = "disabled";
 		};
 	};
 };
