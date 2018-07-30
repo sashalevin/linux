@@ -431,7 +431,7 @@ static long linehandle_ioctl(struct file *filep, unsigned int cmd,
 	int i;
 
 	if (cmd == GPIOHANDLE_GET_LINE_VALUES_IOCTL) {
-		/* TODO: check if descriptors are really input */
+		/* NOTE: It's ok to read values of output lines. */
 		int ret = gpiod_get_array_value_complex(false,
 							true,
 							lh->numdescs,
@@ -449,7 +449,13 @@ static long linehandle_ioctl(struct file *filep, unsigned int cmd,
 
 		return 0;
 	} else if (cmd == GPIOHANDLE_SET_LINE_VALUES_IOCTL) {
-		/* TODO: check if descriptors are really output */
+		/*
+		 * All line descriptors were created at once with the same
+		 * flags so just check if the first one is really output.
+		 */
+		if (!test_bit(FLAG_IS_OUT, &lh->descs[0]->flags))
+			return -EPERM;
+
 		if (copy_from_user(&ghd, ip, sizeof(ghd)))
 			return -EFAULT;
 
@@ -1664,8 +1670,7 @@ static void gpiochip_set_cascaded_irqchip(struct gpio_chip *gpiochip,
 	if (parent_handler) {
 		if (gpiochip->can_sleep) {
 			chip_err(gpiochip,
-				 "you cannot have chained interrupts on a "
-				 "chip that may sleep\n");
+				 "you cannot have chained interrupts on a chip that may sleep\n");
 			return;
 		}
 		/*
@@ -1850,8 +1855,7 @@ static int gpiochip_add_irqchip(struct gpio_chip *gpiochip,
 		return 0;
 
 	if (gpiochip->irq.parent_handler && gpiochip->can_sleep) {
-		chip_err(gpiochip, "you cannot have chained interrupts on a "
-			 "chip that may sleep\n");
+		chip_err(gpiochip, "you cannot have chained interrupts on a chip that may sleep\n");
 		return -EINVAL;
 	}
 
@@ -3194,6 +3198,19 @@ int gpiod_cansleep(const struct gpio_desc *desc)
 EXPORT_SYMBOL_GPL(gpiod_cansleep);
 
 /**
+ * gpiod_set_consumer_name() - set the consumer name for the descriptor
+ * @desc: gpio to set the consumer name on
+ * @name: the new consumer name
+ */
+void gpiod_set_consumer_name(struct gpio_desc *desc, const char *name)
+{
+	VALIDATE_DESC_VOID(desc);
+	/* Just overwrite whatever the previous name was */
+	desc->label = name;
+}
+EXPORT_SYMBOL_GPL(gpiod_set_consumer_name);
+
+/**
  * gpiod_to_irq() - return the IRQ corresponding to a GPIO
  * @desc: gpio whose IRQ will be returned (already requested)
  *
@@ -3249,18 +3266,19 @@ int gpiochip_lock_as_irq(struct gpio_chip *chip, unsigned int offset)
 	 * behind our back
 	 */
 	if (!chip->can_sleep && chip->get_direction) {
-		int dir = chip->get_direction(chip, offset);
+		int dir = gpiod_get_direction(desc);
 
-		if (dir)
-			clear_bit(FLAG_IS_OUT, &desc->flags);
-		else
-			set_bit(FLAG_IS_OUT, &desc->flags);
+		if (dir < 0) {
+			chip_err(chip, "%s: cannot get GPIO direction\n",
+				 __func__);
+			return dir;
+		}
 	}
 
 	if (test_bit(FLAG_IS_OUT, &desc->flags)) {
 		chip_err(chip,
-			  "%s: tried to flag a GPIO set as output for IRQ\n",
-			  __func__);
+			 "%s: tried to flag a GPIO set as output for IRQ\n",
+			 __func__);
 		return -EIO;
 	}
 
@@ -3639,9 +3657,16 @@ static struct gpio_desc *gpiod_find(struct device *dev, const char *con_id,
 		chip = find_chip_by_name(p->chip_label);
 
 		if (!chip) {
-			dev_err(dev, "cannot find GPIO chip %s\n",
-				p->chip_label);
-			return ERR_PTR(-ENODEV);
+			/*
+			 * As the lookup table indicates a chip with
+			 * p->chip_label should exist, assume it may
+			 * still appear later and let the interested
+			 * consumer be probed again or let the Deferred
+			 * Probe infrastructure handle the error.
+			 */
+			dev_warn(dev, "cannot find GPIO chip %s, deferring\n",
+				 p->chip_label);
+			return ERR_PTR(-EPROBE_DEFER);
 		}
 
 		if (chip->ngpio <= p->chip_hwnum) {
@@ -4215,7 +4240,7 @@ static int __init gpiolib_dev_init(void)
 	int ret;
 
 	/* Register GPIO sysfs bus */
-	ret  = bus_register(&gpio_bus_type);
+	ret = bus_register(&gpio_bus_type);
 	if (ret < 0) {
 		pr_err("gpiolib: could not register GPIO bus type\n");
 		return ret;
@@ -4259,9 +4284,7 @@ static void gpiolib_dbg_show(struct seq_file *s, struct gpio_device *gdev)
 		seq_printf(s, " gpio-%-3d (%-20.20s|%-20.20s) %s %s %s",
 			gpio, gdesc->name ? gdesc->name : "", gdesc->label,
 			is_out ? "out" : "in ",
-			chip->get
-				? (chip->get(chip, i) ? "hi" : "lo")
-				: "?  ",
+			chip->get ? (chip->get(chip, i) ? "hi" : "lo") : "?  ",
 			is_irq ? "IRQ" : "   ");
 		seq_printf(s, "\n");
 	}
