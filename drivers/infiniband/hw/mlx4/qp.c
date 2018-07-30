@@ -1859,8 +1859,7 @@ static int _mlx4_set_path(struct mlx4_ib_dev *dev,
 	if (rdma_ah_get_ah_flags(ah) & IB_AH_GRH) {
 		const struct ib_global_route *grh = rdma_ah_read_grh(ah);
 		int real_sgid_index =
-			mlx4_ib_gid_index_to_real_index(dev, port,
-							grh->sgid_index);
+			mlx4_ib_gid_index_to_real_index(dev, grh->sgid_attr);
 
 		if (real_sgid_index < 0)
 			return real_sgid_index;
@@ -2176,6 +2175,7 @@ static int __mlx4_ib_modify_qp(void *src, enum mlx4_ib_source_type src_type,
 {
 	struct ib_uobject *ibuobject;
 	struct ib_srq  *ibsrq;
+	const struct ib_gid_attr *gid_attr = NULL;
 	struct ib_rwq_ind_table *rwq_ind_tbl;
 	enum ib_qp_type qp_type;
 	struct mlx4_ib_dev *dev;
@@ -2356,29 +2356,17 @@ static int __mlx4_ib_modify_qp(void *src, enum mlx4_ib_source_type src_type,
 	if (attr_mask & IB_QP_AV) {
 		u8 port_num = mlx4_is_bonded(dev->dev) ? 1 :
 			attr_mask & IB_QP_PORT ? attr->port_num : qp->port;
-		union ib_gid gid;
-		struct ib_gid_attr gid_attr = {.gid_type = IB_GID_TYPE_IB};
 		u16 vlan = 0xffff;
 		u8 smac[ETH_ALEN];
-		int status = 0;
 		int is_eth =
 			rdma_cap_eth_ah(&dev->ib_dev, port_num) &&
 			rdma_ah_get_ah_flags(&attr->ah_attr) & IB_AH_GRH;
 
 		if (is_eth) {
-			int index =
-				rdma_ah_read_grh(&attr->ah_attr)->sgid_index;
-
-			status = ib_get_cached_gid(&dev->ib_dev, port_num,
-						   index, &gid, &gid_attr);
-			if (!status) {
-				vlan = rdma_vlan_dev_vlan_id(gid_attr.ndev);
-				memcpy(smac, gid_attr.ndev->dev_addr, ETH_ALEN);
-				dev_put(gid_attr.ndev);
-			}
+			gid_attr = attr->ah_attr.grh.sgid_attr;
+			vlan = rdma_vlan_dev_vlan_id(gid_attr->ndev);
+			memcpy(smac, gid_attr->ndev->dev_addr, ETH_ALEN);
 		}
-		if (status)
-			goto out;
 
 		if (mlx4_set_path(dev, attr, attr_mask, qp, &context->pri_path,
 				  port_num, vlan, smac))
@@ -2389,7 +2377,7 @@ static int __mlx4_ib_modify_qp(void *src, enum mlx4_ib_source_type src_type,
 
 		if (is_eth &&
 		    (cur_state == IB_QPS_INIT && new_state == IB_QPS_RTR)) {
-			u8 qpc_roce_mode = gid_type_to_qpc(gid_attr.gid_type);
+			u8 qpc_roce_mode = gid_type_to_qpc(gid_attr->gid_type);
 
 			if (qpc_roce_mode == MLX4_QPC_ROCE_MODE_UNDEFINED) {
 				err = -EINVAL;
@@ -3181,10 +3169,8 @@ static int build_mlx_header(struct mlx4_ib_sqp *sqp, struct ib_ud_wr *wr,
 					to_mdev(ib_dev)->sriov.demux[sqp->qp.port - 1].
 						       guid_cache[ah->av.ib.gid_index];
 			} else {
-				ib_get_cached_gid(ib_dev,
-						  be32_to_cpu(ah->av.ib.port_pd) >> 24,
-						  ah->av.ib.gid_index,
-						  &sqp->ud_header.grh.source_gid, NULL);
+				sqp->ud_header.grh.source_gid =
+					ah->ibah.sgid_attr->gid;
 			}
 		}
 		memcpy(sqp->ud_header.grh.destination_gid.raw,
@@ -3582,8 +3568,8 @@ static void add_zero_len_inline(void *wqe)
 	inl->byte_count = cpu_to_be32(1 << 31);
 }
 
-int mlx4_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
-		      struct ib_send_wr **bad_wr)
+static int _mlx4_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
+			      struct ib_send_wr **bad_wr, bool drain)
 {
 	struct mlx4_ib_qp *qp = to_mqp(ibqp);
 	void *wqe;
@@ -3623,7 +3609,8 @@ int mlx4_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
 	}
 
 	spin_lock_irqsave(&qp->sq.lock, flags);
-	if (mdev->dev->persist->state & MLX4_DEVICE_STATE_INTERNAL_ERROR) {
+	if (mdev->dev->persist->state & MLX4_DEVICE_STATE_INTERNAL_ERROR &&
+	    !drain) {
 		err = -EIO;
 		*bad_wr = wr;
 		nreq = 0;
@@ -3913,8 +3900,14 @@ out:
 	return err;
 }
 
-int mlx4_ib_post_recv(struct ib_qp *ibqp, struct ib_recv_wr *wr,
-		      struct ib_recv_wr **bad_wr)
+int mlx4_ib_post_send(struct ib_qp *ibqp, struct ib_send_wr *wr,
+		      struct ib_send_wr **bad_wr)
+{
+	return _mlx4_ib_post_send(ibqp, wr, bad_wr, false);
+}
+
+static int _mlx4_ib_post_recv(struct ib_qp *ibqp, struct ib_recv_wr *wr,
+			      struct ib_recv_wr **bad_wr, bool drain)
 {
 	struct mlx4_ib_qp *qp = to_mqp(ibqp);
 	struct mlx4_wqe_data_seg *scat;
@@ -3929,7 +3922,8 @@ int mlx4_ib_post_recv(struct ib_qp *ibqp, struct ib_recv_wr *wr,
 	max_gs = qp->rq.max_gs;
 	spin_lock_irqsave(&qp->rq.lock, flags);
 
-	if (mdev->dev->persist->state & MLX4_DEVICE_STATE_INTERNAL_ERROR) {
+	if (mdev->dev->persist->state & MLX4_DEVICE_STATE_INTERNAL_ERROR &&
+	    !drain) {
 		err = -EIO;
 		*bad_wr = wr;
 		nreq = 0;
@@ -4000,6 +3994,12 @@ out:
 	return err;
 }
 
+int mlx4_ib_post_recv(struct ib_qp *ibqp, struct ib_recv_wr *wr,
+		      struct ib_recv_wr **bad_wr)
+{
+	return _mlx4_ib_post_recv(ibqp, wr, bad_wr, false);
+}
+
 static inline enum ib_qp_state to_ib_qp_state(enum mlx4_qp_state mlx4_state)
 {
 	switch (mlx4_state) {
@@ -4047,9 +4047,9 @@ static void to_rdma_ah_attr(struct mlx4_ib_dev *ibdev,
 	u8 port_num = path->sched_queue & 0x40 ? 2 : 1;
 
 	memset(ah_attr, 0, sizeof(*ah_attr));
-	ah_attr->type = rdma_ah_find_type(&ibdev->ib_dev, port_num);
 	if (port_num == 0 || port_num > dev->caps.num_ports)
 		return;
+	ah_attr->type = rdma_ah_find_type(&ibdev->ib_dev, port_num);
 
 	if (ah_attr->type == RDMA_AH_ATTR_TYPE_ROCE)
 		rdma_ah_set_sl(ah_attr, ((path->sched_queue >> 3) & 0x7) |
@@ -4464,4 +4464,132 @@ int mlx4_ib_destroy_rwq_ind_table(struct ib_rwq_ind_table *ib_rwq_ind_tbl)
 {
 	kfree(ib_rwq_ind_tbl);
 	return 0;
+}
+
+struct mlx4_ib_drain_cqe {
+	struct ib_cqe cqe;
+	struct completion done;
+};
+
+static void mlx4_ib_drain_qp_done(struct ib_cq *cq, struct ib_wc *wc)
+{
+	struct mlx4_ib_drain_cqe *cqe = container_of(wc->wr_cqe,
+						     struct mlx4_ib_drain_cqe,
+						     cqe);
+
+	complete(&cqe->done);
+}
+
+/* This function returns only once the drained WR was completed */
+static void handle_drain_completion(struct ib_cq *cq,
+				    struct mlx4_ib_drain_cqe *sdrain,
+				    struct mlx4_ib_dev *dev)
+{
+	struct mlx4_dev *mdev = dev->dev;
+
+	if (cq->poll_ctx == IB_POLL_DIRECT) {
+		while (wait_for_completion_timeout(&sdrain->done, HZ / 10) <= 0)
+			ib_process_cq_direct(cq, -1);
+		return;
+	}
+
+	if (mdev->persist->state == MLX4_DEVICE_STATE_INTERNAL_ERROR) {
+		struct mlx4_ib_cq *mcq = to_mcq(cq);
+		bool triggered = false;
+		unsigned long flags;
+
+		spin_lock_irqsave(&dev->reset_flow_resource_lock, flags);
+		/* Make sure that the CQ handler won't run if wasn't run yet */
+		if (!mcq->mcq.reset_notify_added)
+			mcq->mcq.reset_notify_added = 1;
+		else
+			triggered = true;
+		spin_unlock_irqrestore(&dev->reset_flow_resource_lock, flags);
+
+		if (triggered) {
+			/* Wait for any scheduled/running task to be ended */
+			switch (cq->poll_ctx) {
+			case IB_POLL_SOFTIRQ:
+				irq_poll_disable(&cq->iop);
+				irq_poll_enable(&cq->iop);
+				break;
+			case IB_POLL_WORKQUEUE:
+				cancel_work_sync(&cq->work);
+				break;
+			default:
+				WARN_ON_ONCE(1);
+			}
+		}
+
+		/* Run the CQ handler - this makes sure that the drain WR will
+		 * be processed if wasn't processed yet.
+		 */
+		mcq->mcq.comp(&mcq->mcq);
+	}
+
+	wait_for_completion(&sdrain->done);
+}
+
+void mlx4_ib_drain_sq(struct ib_qp *qp)
+{
+	struct ib_cq *cq = qp->send_cq;
+	struct ib_qp_attr attr = { .qp_state = IB_QPS_ERR };
+	struct mlx4_ib_drain_cqe sdrain;
+	struct ib_send_wr *bad_swr;
+	struct ib_rdma_wr swr = {
+		.wr = {
+			.next = NULL,
+			{ .wr_cqe	= &sdrain.cqe, },
+			.opcode	= IB_WR_RDMA_WRITE,
+		},
+	};
+	int ret;
+	struct mlx4_ib_dev *dev = to_mdev(qp->device);
+	struct mlx4_dev *mdev = dev->dev;
+
+	ret = ib_modify_qp(qp, &attr, IB_QP_STATE);
+	if (ret && mdev->persist->state != MLX4_DEVICE_STATE_INTERNAL_ERROR) {
+		WARN_ONCE(ret, "failed to drain send queue: %d\n", ret);
+		return;
+	}
+
+	sdrain.cqe.done = mlx4_ib_drain_qp_done;
+	init_completion(&sdrain.done);
+
+	ret = _mlx4_ib_post_send(qp, &swr.wr, &bad_swr, true);
+	if (ret) {
+		WARN_ONCE(ret, "failed to drain send queue: %d\n", ret);
+		return;
+	}
+
+	handle_drain_completion(cq, &sdrain, dev);
+}
+
+void mlx4_ib_drain_rq(struct ib_qp *qp)
+{
+	struct ib_cq *cq = qp->recv_cq;
+	struct ib_qp_attr attr = { .qp_state = IB_QPS_ERR };
+	struct mlx4_ib_drain_cqe rdrain;
+	struct ib_recv_wr rwr = {}, *bad_rwr;
+	int ret;
+	struct mlx4_ib_dev *dev = to_mdev(qp->device);
+	struct mlx4_dev *mdev = dev->dev;
+
+	ret = ib_modify_qp(qp, &attr, IB_QP_STATE);
+	if (ret && mdev->persist->state != MLX4_DEVICE_STATE_INTERNAL_ERROR) {
+		WARN_ONCE(ret, "failed to drain recv queue: %d\n", ret);
+		return;
+	}
+
+	rwr.wr_cqe = &rdrain.cqe;
+	rdrain.cqe.done = mlx4_ib_drain_qp_done;
+	init_completion(&rdrain.done);
+
+	ret = _mlx4_ib_post_recv(qp, &rwr, &bad_rwr, true);
+	if (ret) {
+		WARN_ONCE(ret, "failed to drain recv queue: %d\n", ret);
+		return;
+	}
+
+	handle_drain_completion(cq, &rdrain, dev);
 }

@@ -112,7 +112,8 @@ int qedr_query_device(struct ib_device *ibdev,
 	    IB_DEVICE_RC_RNR_NAK_GEN |
 	    IB_DEVICE_LOCAL_DMA_LKEY | IB_DEVICE_MEM_MGT_EXTENSIONS;
 
-	attr->max_sge = qattr->max_sge;
+	attr->max_send_sge = qattr->max_sge;
+	attr->max_recv_sge = qattr->max_sge;
 	attr->max_sge_rd = qattr->max_sge;
 	attr->max_cq = qattr->max_cq;
 	attr->max_cqe = qattr->max_cqe;
@@ -224,7 +225,7 @@ int qedr_query_port(struct ib_device *ibdev, u8 port, struct ib_port_attr *attr)
 	attr->lmc = 0;
 	attr->sm_lid = 0;
 	attr->sm_sl = 0;
-	attr->port_cap_flags = IB_PORT_IP_BASED_GIDS;
+	attr->ip_gids = true;
 	if (rdma_protocol_iwarp(&dev->ibdev, 1)) {
 		attr->gid_tbl_len = 1;
 		attr->pkey_tbl_len = 1;
@@ -1075,27 +1076,19 @@ static inline int get_gid_info_from_table(struct ib_qp *ibqp,
 					  struct qed_rdma_modify_qp_in_params
 					  *qp_params)
 {
+	const struct ib_gid_attr *gid_attr;
 	enum rdma_network_type nw_type;
-	struct ib_gid_attr gid_attr;
 	const struct ib_global_route *grh = rdma_ah_read_grh(&attr->ah_attr);
-	union ib_gid gid;
 	u32 ipv4_addr;
-	int rc = 0;
 	int i;
 
-	rc = ib_get_cached_gid(ibqp->device,
-			       rdma_ah_get_port_num(&attr->ah_attr),
-			       grh->sgid_index, &gid, &gid_attr);
-	if (rc)
-		return rc;
+	gid_attr = grh->sgid_attr;
+	qp_params->vlan_id = rdma_vlan_dev_vlan_id(gid_attr->ndev);
 
-	qp_params->vlan_id = rdma_vlan_dev_vlan_id(gid_attr.ndev);
-
-	dev_put(gid_attr.ndev);
-	nw_type = ib_gid_to_network_type(gid_attr.gid_type, &gid);
+	nw_type = rdma_gid_attr_network_type(gid_attr);
 	switch (nw_type) {
 	case RDMA_NETWORK_IPV6:
-		memcpy(&qp_params->sgid.bytes[0], &gid.raw[0],
+		memcpy(&qp_params->sgid.bytes[0], &gid_attr->gid.raw[0],
 		       sizeof(qp_params->sgid));
 		memcpy(&qp_params->dgid.bytes[0],
 		       &grh->dgid,
@@ -1105,7 +1098,7 @@ static inline int get_gid_info_from_table(struct ib_qp *ibqp,
 			  QED_ROCE_MODIFY_QP_VALID_ROCE_MODE, 1);
 		break;
 	case RDMA_NETWORK_IB:
-		memcpy(&qp_params->sgid.bytes[0], &gid.raw[0],
+		memcpy(&qp_params->sgid.bytes[0], &gid_attr->gid.raw[0],
 		       sizeof(qp_params->sgid));
 		memcpy(&qp_params->dgid.bytes[0],
 		       &grh->dgid,
@@ -1115,7 +1108,7 @@ static inline int get_gid_info_from_table(struct ib_qp *ibqp,
 	case RDMA_NETWORK_IPV4:
 		memset(&qp_params->sgid, 0, sizeof(qp_params->sgid));
 		memset(&qp_params->dgid, 0, sizeof(qp_params->dgid));
-		ipv4_addr = qedr_get_ipv4_from_gid(gid.raw);
+		ipv4_addr = qedr_get_ipv4_from_gid(gid_attr->gid.raw);
 		qp_params->sgid.ipv4_addr = ipv4_addr;
 		ipv4_addr =
 		    qedr_get_ipv4_from_gid(grh->dgid.raw);
@@ -2305,7 +2298,7 @@ struct ib_ah *qedr_create_ah(struct ib_pd *ibpd, struct rdma_ah_attr *attr,
 	if (!ah)
 		return ERR_PTR(-ENOMEM);
 
-	ah->attr = *attr;
+	rdma_copy_ah_attr(&ah->attr, attr);
 
 	return &ah->ibah;
 }
@@ -2314,6 +2307,7 @@ int qedr_destroy_ah(struct ib_ah *ibah)
 {
 	struct qedr_ah *ah = get_qedr_ah(ibah);
 
+	rdma_destroy_ah_attr(&ah->attr);
 	kfree(ah);
 	return 0;
 }

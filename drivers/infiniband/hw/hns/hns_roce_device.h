@@ -579,22 +579,22 @@ struct hns_roce_ceqe {
 };
 
 struct hns_roce_aeqe {
-	u32 asyn;
+	__le32 asyn;
 	union {
 		struct {
-			u32 qp;
+			__le32 qp;
 			u32 rsv0;
 			u32 rsv1;
 		} qp_event;
 
 		struct {
-			u32 cq;
+			__le32 cq;
 			u32 rsv0;
 			u32 rsv1;
 		} cq_event;
 
 		struct {
-			u32 ceqe;
+			__le32 ceqe;
 			u32 rsv0;
 			u32 rsv1;
 		} ce_event;
@@ -720,6 +720,9 @@ struct hns_roce_caps {
 	u32		eqe_ba_pg_sz;
 	u32		eqe_buf_pg_sz;
 	u32		eqe_hop_num;
+	u32		sl_num;
+	u32		tsq_buf_pg_sz;
+	u32		tpq_buf_pg_sz;
 	u32		chunk_sz;	/* chunk size in non multihop mode*/
 	u64		flags;
 };
@@ -736,7 +739,7 @@ struct hns_roce_hw {
 			 u16 token, int event);
 	int (*chk_mbox)(struct hns_roce_dev *hr_dev, unsigned long timeout);
 	int (*set_gid)(struct hns_roce_dev *hr_dev, u8 port, int gid_index,
-		       union ib_gid *gid, const struct ib_gid_attr *attr);
+		       const union ib_gid *gid, const struct ib_gid_attr *attr);
 	int (*set_mac)(struct hns_roce_dev *hr_dev, u8 phy_port, u8 *addr);
 	void (*set_mtu)(struct hns_roce_dev *hr_dev, u8 phy_port,
 			enum ib_mtu mtu);
@@ -864,7 +867,7 @@ static inline struct hns_roce_sqp *hr_to_hr_sqp(struct hns_roce_qp *hr_qp)
 	return container_of(hr_qp, struct hns_roce_sqp, hr_qp);
 }
 
-static inline void hns_roce_write64_k(__be32 val[2], void __iomem *dest)
+static inline void hns_roce_write64_k(__le32 val[2], void __iomem *dest)
 {
 	__raw_writeq(*(u64 *) val, dest);
 }

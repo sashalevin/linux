@@ -89,7 +89,8 @@ int ocrdma_query_device(struct ib_device *ibdev, struct ib_device_attr *attr,
 					IB_DEVICE_SYS_IMAGE_GUID |
 					IB_DEVICE_LOCAL_DMA_LKEY |
 					IB_DEVICE_MEM_MGT_EXTENSIONS;
-	attr->max_sge = min(dev->attr.max_send_sge, dev->attr.max_recv_sge);
+	attr->max_send_sge = dev->attr.max_send_sge;
+	attr->max_recv_sge = dev->attr.max_recv_sge;
 	attr->max_sge_rd = dev->attr.max_rdma_sge;
 	attr->max_cq = dev->attr.max_cq;
 	attr->max_cqe = dev->attr.max_cqe;
@@ -196,11 +197,10 @@ int ocrdma_query_port(struct ib_device *ibdev,
 	props->sm_lid = 0;
 	props->sm_sl = 0;
 	props->state = port_state;
-	props->port_cap_flags =
-	    IB_PORT_CM_SUP |
-	    IB_PORT_REINIT_SUP |
-	    IB_PORT_DEVICE_MGMT_SUP | IB_PORT_VENDOR_CLASS_SUP |
-	    IB_PORT_IP_BASED_GIDS;
+	props->port_cap_flags = IB_PORT_CM_SUP | IB_PORT_REINIT_SUP |
+				IB_PORT_DEVICE_MGMT_SUP |
+				IB_PORT_VENDOR_CLASS_SUP;
+	props->ip_gids = true;
 	props->gid_tbl_len = OCRDMA_MAX_SGID;
 	props->pkey_tbl_len = 1;
 	props->bad_pkey_cntr = 0;
@@ -1774,13 +1774,13 @@ int ocrdma_destroy_qp(struct ib_qp *ibqp)
 	 * protect against proessing in-flight CQEs for this QP.
 	 */
 	spin_lock_irqsave(&qp->sq_cq->cq_lock, flags);
-	if (qp->rq_cq && (qp->rq_cq != qp->sq_cq))
+	if (qp->rq_cq && (qp->rq_cq != qp->sq_cq)) {
 		spin_lock(&qp->rq_cq->cq_lock);
-
-	ocrdma_del_qpn_map(dev, qp);
-
-	if (qp->rq_cq && (qp->rq_cq != qp->sq_cq))
+		ocrdma_del_qpn_map(dev, qp);
 		spin_unlock(&qp->rq_cq->cq_lock);
+	} else {
+		ocrdma_del_qpn_map(dev, qp);
+	}
 	spin_unlock_irqrestore(&qp->sq_cq->cq_lock, flags);
 
 	if (!pd->uctx) {
