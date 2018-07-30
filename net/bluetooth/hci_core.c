@@ -695,6 +695,23 @@ static int hci_init3_req(struct hci_request *req, unsigned long opt)
 		if (hdev->commands[35] & (0x20 | 0x40))
 			events[1] |= 0x08;        /* LE PHY Update Complete */
 
+		/* If the controller supports LE Set Extended Scan Parameters
+		 * and LE Set Extended Scan Enable commands, enable the
+		 * corresponding event.
+		 */
+		if (use_ext_scan(hdev))
+			events[1] |= 0x10;	/* LE Extended Advertising
+						 * Report
+						 */
+
+		/* If the controller supports the LE Extended Create Connection
+		 * command, enable the corresponding event.
+		 */
+		if (use_ext_conn(hdev))
+			events[1] |= 0x02;      /* LE Enhanced Connection
+						 * Complete
+						 */
+
 		hci_req_add(req, HCI_OP_LE_SET_EVENT_MASK, sizeof(events),
 			    events);
 
@@ -712,6 +729,17 @@ static int hci_init3_req(struct hci_request *req, unsigned long opt)
 		if (hdev->commands[26] & 0x80) {
 			/* Clear LE White List */
 			hci_req_add(req, HCI_OP_LE_CLEAR_WHITE_LIST, 0, NULL);
+		}
+
+		if (hdev->commands[34] & 0x40) {
+			/* Read LE Resolving List Size */
+			hci_req_add(req, HCI_OP_LE_READ_RESOLV_LIST_SIZE,
+				    0, NULL);
+		}
+
+		if (hdev->commands[34] & 0x20) {
+			/* Clear LE Resolving List */
+			hci_req_add(req, HCI_OP_LE_CLEAR_RESOLV_LIST, 0, NULL);
 		}
 
 		if (hdev->le_features[0] & HCI_LE_DATA_LEN_EXT) {
@@ -3017,6 +3045,7 @@ struct hci_dev *hci_alloc_dev(void)
 	INIT_LIST_HEAD(&hdev->identity_resolving_keys);
 	INIT_LIST_HEAD(&hdev->remote_oob_data);
 	INIT_LIST_HEAD(&hdev->le_white_list);
+	INIT_LIST_HEAD(&hdev->le_resolv_list);
 	INIT_LIST_HEAD(&hdev->le_conn_params);
 	INIT_LIST_HEAD(&hdev->pend_le_conns);
 	INIT_LIST_HEAD(&hdev->pend_le_reports);
@@ -3218,6 +3247,7 @@ void hci_unregister_dev(struct hci_dev *hdev)
 	hci_remote_oob_data_clear(hdev);
 	hci_adv_instances_clear(hdev);
 	hci_bdaddr_list_clear(&hdev->le_white_list);
+	hci_bdaddr_list_clear(&hdev->le_resolv_list);
 	hci_conn_params_clear_all(hdev);
 	hci_discovery_filter_clear(hdev);
 	hci_dev_unlock(hdev);

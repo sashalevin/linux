@@ -221,6 +221,7 @@ struct hci_dev {
 	__u8		features[HCI_MAX_PAGES][8];
 	__u8		le_features[8];
 	__u8		le_white_list_size;
+	__u8		le_resolv_list_size;
 	__u8		le_states[8];
 	__u8		commands[64];
 	__u8		hci_ver;
@@ -367,6 +368,7 @@ struct hci_dev {
 	struct list_head	identity_resolving_keys;
 	struct list_head	remote_oob_data;
 	struct list_head	le_white_list;
+	struct list_head	le_resolv_list;
 	struct list_head	le_conn_params;
 	struct list_head	pend_le_conns;
 	struct list_head	pend_le_reports;
@@ -1155,6 +1157,12 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 				!hci_dev_test_flag(dev, HCI_AUTO_OFF))
 #define bredr_sc_enabled(dev)  (lmp_sc_capable(dev) && \
 				hci_dev_test_flag(dev, HCI_SC_ENABLED))
+
+/* Use ext scanning if set ext scan param and ext scan enable is supported */
+#define use_ext_scan(dev) (((dev)->commands[37] & 0x20) && \
+			   ((dev)->commands[37] & 0x40))
+/* Use ext create connection if command is supported */
+#define use_ext_conn(dev) ((dev)->commands[37] & 0x80)
 
 /* ----- HCI protocols ----- */
 #define HCI_PROTO_DEFER             0x01
