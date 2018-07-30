@@ -93,7 +93,7 @@ static int max_requests = IBMVSCSI_MAX_REQUESTS_DEFAULT;
 static int max_events = IBMVSCSI_MAX_REQUESTS_DEFAULT + 2;
 static int fast_fail = 1;
 static int client_reserve = 1;
-static char partition_name[97] = "UNKNOWN";
+static char partition_name[96] = "UNKNOWN";
 static unsigned int partition_number = -1;
 static LIST_HEAD(ibmvscsi_head);
 
@@ -262,7 +262,7 @@ static void gather_partition_info(void)
 
 	ppartition_name = of_get_property(of_root, "ibm,partition-name", NULL);
 	if (ppartition_name)
-		strncpy(partition_name, ppartition_name,
+		strlcpy(partition_name, ppartition_name,
 				sizeof(partition_name));
 	p_number_ptr = of_get_property(of_root, "ibm,partition-no", NULL);
 	if (p_number_ptr)
@@ -681,7 +681,7 @@ static int map_sg_list(struct scsi_cmnd *cmd, int nseg,
 
 /**
  * map_sg_data: - Maps dma for a scatterlist and initializes decriptor fields
- * @cmd:	Scsi_Cmnd with the scatterlist
+ * @cmd:	struct scsi_cmnd with the scatterlist
  * @srp_cmd:	srp_cmd that contains the memory descriptor
  * @dev:	device for which to map dma memory
  *

@@ -1279,6 +1279,8 @@ lpfc_nvme_prep_io_cmd(struct lpfc_vport *vport,
 	/* Word 9 */
 	bf_set(wqe_reqtag, &wqe->generic.wqe_com, pwqeq->iotag);
 
+	/* Words 13 14 15 are for PBDE support */
+
 	pwqeq->vport = vport;
 	return 0;
 }
@@ -1378,7 +1380,7 @@ lpfc_nvme_prep_io_dma(struct lpfc_vport *vport,
 			data_sg = sg_next(data_sg);
 			sgl++;
 		}
-		if (phba->nvme_embed_pbde) {
+		if (phba->cfg_enable_pbde) {
 			/* Use PBDE support for first SGL only, offset == 0 */
 			/* Words 13-15 */
 			bde = (struct ulp_bde64 *)
@@ -1394,10 +1396,8 @@ lpfc_nvme_prep_io_dma(struct lpfc_vport *vport,
 			memset(&wqe->words[13], 0, (sizeof(uint32_t) * 3));
 			bf_set(wqe_pbde, &wqe->generic.wqe_com, 0);
 		}
-	} else {
-		bf_set(wqe_pbde, &wqe->generic.wqe_com, 0);
-		memset(&wqe->words[13], 0, (sizeof(uint32_t) * 3));
 
+	} else {
 		/* For this clause to be valid, the payload_length
 		 * and sg_cnt must zero.
 		 */
@@ -2970,7 +2970,7 @@ lpfc_nvme_wait_for_io_drain(struct lpfc_hba *phba)
 	struct lpfc_sli_ring  *pring;
 	u32 i, wait_cnt = 0;
 
-	if (phba->sli_rev < LPFC_SLI_REV4)
+	if (phba->sli_rev < LPFC_SLI_REV4 || !phba->sli4_hba.nvme_wq)
 		return;
 
 	/* Cycle through all NVME rings and make sure all outstanding
@@ -2978,6 +2978,9 @@ lpfc_nvme_wait_for_io_drain(struct lpfc_hba *phba)
 	 */
 	for (i = 0; i < phba->cfg_nvme_io_channel; i++) {
 		pring = phba->sli4_hba.nvme_wq[i]->pring;
+
+		if (!pring)
+			continue;
 
 		/* Retrieve everything on the txcmplq */
 		while (!list_empty(&pring->txcmplq)) {

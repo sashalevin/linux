@@ -79,7 +79,7 @@ struct target_core_fabric_ops {
 	void (*fabric_drop_wwn)(struct se_wwn *);
 	void (*add_wwn_groups)(struct se_wwn *);
 	struct se_portal_group *(*fabric_make_tpg)(struct se_wwn *,
-				struct config_group *, const char *);
+						   const char *);
 	void (*fabric_drop_tpg)(struct se_portal_group *);
 	int (*fabric_post_link)(struct se_portal_group *,
 				struct se_lun *);
@@ -115,7 +115,8 @@ struct se_session *target_alloc_session(struct se_portal_group *,
 		int (*callback)(struct se_portal_group *,
 				struct se_session *, void *));
 
-struct se_session *transport_init_session(enum target_prot_op);
+void transport_init_session(struct se_session *);
+struct se_session *transport_alloc_session(enum target_prot_op);
 int transport_alloc_session_tags(struct se_session *, unsigned int,
 		unsigned int);
 struct se_session *transport_init_session_tags(unsigned int, unsigned int,
