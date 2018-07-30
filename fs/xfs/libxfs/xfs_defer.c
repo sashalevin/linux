@@ -350,9 +350,9 @@ xfs_defer_finish(
 	 * Note that this code can go away once all dfops users attach to the
 	 * associated tp.
 	 */
-	ASSERT(!(*tp)->t_agfl_dfops || ((*tp)->t_agfl_dfops == dop));
-	orig_dop = (*tp)->t_agfl_dfops;
-	(*tp)->t_agfl_dfops = dop;
+	ASSERT(!(*tp)->t_dfops || ((*tp)->t_dfops == dop));
+	orig_dop = (*tp)->t_dfops;
+	(*tp)->t_dfops = dop;
 
 	/* Until we run out of pending work to finish... */
 	while (xfs_defer_has_unfinished_work(dop)) {
@@ -424,8 +424,14 @@ xfs_defer_finish(
 			cleanup_fn(*tp, state, error);
 	}
 
+	/*
+	 * Roll the transaction once more to avoid returning to the caller
+	 * with a dirty transaction.
+	 */
+	if ((*tp)->t_flags & XFS_TRANS_DIRTY)
+		error = xfs_defer_trans_roll(tp, dop);
 out:
-	(*tp)->t_agfl_dfops = orig_dop;
+	(*tp)->t_dfops = orig_dop;
 	if (error)
 		trace_xfs_defer_finish_error((*tp)->t_mountp, dop, error);
 	else
@@ -523,12 +529,18 @@ xfs_defer_init_op_type(
 /* Initialize a deferred operation. */
 void
 xfs_defer_init(
-	struct xfs_defer_ops		*dop,
-	xfs_fsblock_t			*fbp)
+	struct xfs_trans		*tp,
+	struct xfs_defer_ops		*dop)
 {
+	struct xfs_mount		*mp = NULL;
+
 	memset(dop, 0, sizeof(struct xfs_defer_ops));
-	*fbp = NULLFSBLOCK;
 	INIT_LIST_HEAD(&dop->dop_intake);
 	INIT_LIST_HEAD(&dop->dop_pending);
-	trace_xfs_defer_init(NULL, dop, _RET_IP_);
+	if (tp) {
+		ASSERT(tp->t_firstblock == NULLFSBLOCK);
+		tp->t_dfops = dop;
+		mp = tp->t_mountp;
+	}
+	trace_xfs_defer_init(mp, dop, _RET_IP_);
 }

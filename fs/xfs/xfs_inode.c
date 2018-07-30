@@ -1143,7 +1143,6 @@ xfs_create(
 	struct xfs_trans	*tp = NULL;
 	int			error;
 	struct xfs_defer_ops	dfops;
-	xfs_fsblock_t		first_block;
 	bool                    unlock_dp_on_error = false;
 	prid_t			prid;
 	struct xfs_dquot	*udqp = NULL;
@@ -1195,8 +1194,7 @@ xfs_create(
 	xfs_ilock(dp, XFS_ILOCK_EXCL | XFS_ILOCK_PARENT);
 	unlock_dp_on_error = true;
 
-	xfs_defer_init(&dfops, &first_block);
-	tp->t_agfl_dfops = &dfops;
+	xfs_defer_init(tp, &dfops);
 
 	/*
 	 * Reserve disk quota and the inode.
@@ -1226,7 +1224,7 @@ xfs_create(
 	unlock_dp_on_error = false;
 
 	error = xfs_dir_createname(tp, dp, name, ip->i_ino,
-					&first_block, &dfops, resblks ?
+				   resblks ?
 					resblks - XFS_IALLOC_SPACE_RES(mp) : 0);
 	if (error) {
 		ASSERT(error != -ENOSPC);
@@ -1402,7 +1400,6 @@ xfs_link(
 	xfs_trans_t		*tp;
 	int			error;
 	struct xfs_defer_ops	dfops;
-	xfs_fsblock_t           first_block;
 	int			resblks;
 
 	trace_xfs_link(tdp, target_name);
@@ -1451,8 +1448,7 @@ xfs_link(
 			goto error_return;
 	}
 
-	xfs_defer_init(&dfops, &first_block);
-	tp->t_agfl_dfops = &dfops;
+	xfs_defer_init(tp, &dfops);
 
 	/*
 	 * Handle initial link state of O_TMPFILE inode
@@ -1464,7 +1460,7 @@ xfs_link(
 	}
 
 	error = xfs_dir_createname(tp, tdp, target_name, sip->i_ino,
-					&first_block, &dfops, resblks);
+				   resblks);
 	if (error)
 		goto error_return;
 	xfs_trans_ichgtime(tp, tdp, XFS_ICHGTIME_MOD | XFS_ICHGTIME_CHG);
@@ -1545,8 +1541,8 @@ xfs_itruncate_extents_flags(
 {
 	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_trans	*tp = *tpp;
+	struct xfs_defer_ops	*odfops = tp->t_dfops;
 	struct xfs_defer_ops	dfops;
-	xfs_fsblock_t		first_block;
 	xfs_fileoff_t		first_unmap_block;
 	xfs_fileoff_t		last_block;
 	xfs_filblks_t		unmap_len;
@@ -1583,10 +1579,9 @@ xfs_itruncate_extents_flags(
 	ASSERT(first_unmap_block < last_block);
 	unmap_len = last_block - first_unmap_block + 1;
 	while (!done) {
-		xfs_defer_init(&dfops, &first_block);
+		xfs_defer_init(tp, &dfops);
 		error = xfs_bunmapi(tp, ip, first_unmap_block, unmap_len, flags,
-				    XFS_ITRUNC_MAX_EXTENTS, &first_block,
-				    &dfops, &done);
+				    XFS_ITRUNC_MAX_EXTENTS, &done);
 		if (error)
 			goto out_bmap_cancel;
 
@@ -1594,8 +1589,8 @@ xfs_itruncate_extents_flags(
 		 * Duplicate the transaction that has the permanent
 		 * reservation and commit the old transaction.
 		 */
-		xfs_defer_ijoin(&dfops, ip);
-		error = xfs_defer_finish(&tp, &dfops);
+		xfs_defer_ijoin(tp->t_dfops, ip);
+		error = xfs_defer_finish(&tp, tp->t_dfops);
 		if (error)
 			goto out_bmap_cancel;
 
@@ -1623,6 +1618,8 @@ xfs_itruncate_extents_flags(
 	trace_xfs_itruncate_extents_end(ip, new_size);
 
 out:
+	/* ->t_dfops points to local stack, don't leak it! */
+	tp->t_dfops = odfops;
 	*tpp = tp;
 	return error;
 out_bmap_cancel:
@@ -1631,7 +1628,7 @@ out_bmap_cancel:
 	 * the transaction can be properly aborted.  We just need to make sure
 	 * we're not holding any resources that we were not when we came in.
 	 */
-	xfs_defer_cancel(&dfops);
+	xfs_defer_cancel(tp->t_dfops);
 	goto out;
 }
 
@@ -1775,7 +1772,6 @@ xfs_inactive_ifree(
 	struct xfs_inode *ip)
 {
 	struct xfs_defer_ops	dfops;
-	xfs_fsblock_t		first_block;
 	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_trans	*tp;
 	int			error;
@@ -1812,9 +1808,8 @@ xfs_inactive_ifree(
 	xfs_ilock(ip, XFS_ILOCK_EXCL);
 	xfs_trans_ijoin(tp, ip, 0);
 
-	xfs_defer_init(&dfops, &first_block);
-	tp->t_agfl_dfops = &dfops;
-	error = xfs_ifree(tp, ip, &dfops);
+	xfs_defer_init(tp, &dfops);
+	error = xfs_ifree(tp, ip);
 	if (error) {
 		/*
 		 * If we fail to free the inode, shut down.  The cancel
@@ -2445,9 +2440,8 @@ xfs_ifree_local_data(
  */
 int
 xfs_ifree(
-	xfs_trans_t	*tp,
-	xfs_inode_t	*ip,
-	struct xfs_defer_ops	*dfops)
+	struct xfs_trans	*tp,
+	struct xfs_inode	*ip)
 {
 	int			error;
 	struct xfs_icluster	xic = { 0 };
@@ -2466,7 +2460,7 @@ xfs_ifree(
 	if (error)
 		return error;
 
-	error = xfs_difree(tp, ip->i_ino, dfops, &xic);
+	error = xfs_difree(tp, ip->i_ino, &xic);
 	if (error)
 		return error;
 
@@ -2578,7 +2572,6 @@ xfs_remove(
 	int			is_dir = S_ISDIR(VFS_I(ip)->i_mode);
 	int                     error = 0;
 	struct xfs_defer_ops	dfops;
-	xfs_fsblock_t           first_block;
 	uint			resblks;
 
 	trace_xfs_remove(dp, name);
@@ -2658,10 +2651,8 @@ xfs_remove(
 	if (error)
 		goto out_trans_cancel;
 
-	xfs_defer_init(&dfops, &first_block);
-	tp->t_agfl_dfops = &dfops;
-	error = xfs_dir_removename(tp, dp, name, ip->i_ino,
-					&first_block, &dfops, resblks);
+	xfs_defer_init(tp, &dfops);
+	error = xfs_dir_removename(tp, dp, name, ip->i_ino, resblks);
 	if (error) {
 		ASSERT(error != -ENOENT);
 		goto out_bmap_cancel;
@@ -2749,9 +2740,9 @@ xfs_sort_for_rename(
 
 static int
 xfs_finish_rename(
-	struct xfs_trans	*tp,
-	struct xfs_defer_ops	*dfops)
+	struct xfs_trans	*tp)
 {
+	struct xfs_defer_ops	*dfops = tp->t_dfops;
 	int			error;
 
 	/*
@@ -2785,8 +2776,6 @@ xfs_cross_rename(
 	struct xfs_inode	*dp2,
 	struct xfs_name		*name2,
 	struct xfs_inode	*ip2,
-	struct xfs_defer_ops	*dfops,
-	xfs_fsblock_t		*first_block,
 	int			spaceres)
 {
 	int		error = 0;
@@ -2795,16 +2784,12 @@ xfs_cross_rename(
 	int		dp2_flags = 0;
 
 	/* Swap inode number for dirent in first parent */
-	error = xfs_dir_replace(tp, dp1, name1,
-				ip2->i_ino,
-				first_block, dfops, spaceres);
+	error = xfs_dir_replace(tp, dp1, name1, ip2->i_ino, spaceres);
 	if (error)
 		goto out_trans_abort;
 
 	/* Swap inode number for dirent in second parent */
-	error = xfs_dir_replace(tp, dp2, name2,
-				ip1->i_ino,
-				first_block, dfops, spaceres);
+	error = xfs_dir_replace(tp, dp2, name2, ip1->i_ino, spaceres);
 	if (error)
 		goto out_trans_abort;
 
@@ -2818,8 +2803,7 @@ xfs_cross_rename(
 
 		if (S_ISDIR(VFS_I(ip2)->i_mode)) {
 			error = xfs_dir_replace(tp, ip2, &xfs_name_dotdot,
-						dp1->i_ino, first_block,
-						dfops, spaceres);
+						dp1->i_ino, spaceres);
 			if (error)
 				goto out_trans_abort;
 
@@ -2845,8 +2829,7 @@ xfs_cross_rename(
 
 		if (S_ISDIR(VFS_I(ip1)->i_mode)) {
 			error = xfs_dir_replace(tp, ip1, &xfs_name_dotdot,
-						dp2->i_ino, first_block,
-						dfops, spaceres);
+						dp2->i_ino, spaceres);
 			if (error)
 				goto out_trans_abort;
 
@@ -2885,10 +2868,10 @@ xfs_cross_rename(
 	}
 	xfs_trans_ichgtime(tp, dp1, XFS_ICHGTIME_MOD | XFS_ICHGTIME_CHG);
 	xfs_trans_log_inode(tp, dp1, XFS_ILOG_CORE);
-	return xfs_finish_rename(tp, dfops);
+	return xfs_finish_rename(tp);
 
 out_trans_abort:
-	xfs_defer_cancel(dfops);
+	xfs_defer_cancel(tp->t_dfops);
 	xfs_trans_cancel(tp);
 	return error;
 }
@@ -2944,7 +2927,6 @@ xfs_rename(
 	struct xfs_mount	*mp = src_dp->i_mount;
 	struct xfs_trans	*tp;
 	struct xfs_defer_ops	dfops;
-	xfs_fsblock_t		first_block;
 	struct xfs_inode	*wip = NULL;		/* whiteout inode */
 	struct xfs_inode	*inodes[__XFS_SORT_INODES];
 	int			num_inodes = __XFS_SORT_INODES;
@@ -3026,14 +3008,13 @@ xfs_rename(
 		goto out_trans_cancel;
 	}
 
-	xfs_defer_init(&dfops, &first_block);
-	tp->t_agfl_dfops = &dfops;
+	xfs_defer_init(tp, &dfops);
 
 	/* RENAME_EXCHANGE is unique from here on. */
 	if (flags & RENAME_EXCHANGE)
 		return xfs_cross_rename(tp, src_dp, src_name, src_ip,
 					target_dp, target_name, target_ip,
-					&dfops, &first_block, spaceres);
+					spaceres);
 
 	/*
 	 * Set up the target.
@@ -3054,8 +3035,7 @@ xfs_rename(
 		 * to account for the ".." reference from the new entry.
 		 */
 		error = xfs_dir_createname(tp, target_dp, target_name,
-						src_ip->i_ino, &first_block,
-						&dfops, spaceres);
+					   src_ip->i_ino, spaceres);
 		if (error)
 			goto out_bmap_cancel;
 
@@ -3094,8 +3074,7 @@ xfs_rename(
 		 * name at the destination directory, remove it first.
 		 */
 		error = xfs_dir_replace(tp, target_dp, target_name,
-					src_ip->i_ino,
-					&first_block, &dfops, spaceres);
+					src_ip->i_ino, spaceres);
 		if (error)
 			goto out_bmap_cancel;
 
@@ -3129,8 +3108,7 @@ xfs_rename(
 		 * directory.
 		 */
 		error = xfs_dir_replace(tp, src_ip, &xfs_name_dotdot,
-					target_dp->i_ino,
-					&first_block, &dfops, spaceres);
+					target_dp->i_ino, spaceres);
 		ASSERT(error != -EEXIST);
 		if (error)
 			goto out_bmap_cancel;
@@ -3169,10 +3147,10 @@ xfs_rename(
 	 */
 	if (wip) {
 		error = xfs_dir_replace(tp, src_dp, src_name, wip->i_ino,
-					&first_block, &dfops, spaceres);
+					spaceres);
 	} else
 		error = xfs_dir_removename(tp, src_dp, src_name, src_ip->i_ino,
-					   &first_block, &dfops, spaceres);
+					   spaceres);
 	if (error)
 		goto out_bmap_cancel;
 
@@ -3207,7 +3185,7 @@ xfs_rename(
 	if (new_parent)
 		xfs_trans_log_inode(tp, target_dp, XFS_ILOG_CORE);
 
-	error = xfs_finish_rename(tp, &dfops);
+	error = xfs_finish_rename(tp);
 	if (wip)
 		IRELE(wip);
 	return error;

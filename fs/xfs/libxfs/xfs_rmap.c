@@ -670,14 +670,8 @@ xfs_rmap_free(
 	cur = xfs_rmapbt_init_cursor(mp, tp, agbp, agno);
 
 	error = xfs_rmap_unmap(cur, bno, len, false, oinfo);
-	if (error)
-		goto out_error;
 
-	xfs_btree_del_cursor(cur, XFS_BTREE_NOERROR);
-	return 0;
-
-out_error:
-	xfs_btree_del_cursor(cur, XFS_BTREE_ERROR);
+	xfs_btree_del_cursor(cur, error);
 	return error;
 }
 
@@ -753,19 +747,19 @@ xfs_rmap_map(
 			&have_lt);
 	if (error)
 		goto out_error;
-	XFS_WANT_CORRUPTED_GOTO(mp, have_lt == 1, out_error);
+	if (have_lt) {
+		error = xfs_rmap_get_rec(cur, &ltrec, &have_lt);
+		if (error)
+			goto out_error;
+		XFS_WANT_CORRUPTED_GOTO(mp, have_lt == 1, out_error);
+		trace_xfs_rmap_lookup_le_range_result(cur->bc_mp,
+				cur->bc_private.a.agno, ltrec.rm_startblock,
+				ltrec.rm_blockcount, ltrec.rm_owner,
+				ltrec.rm_offset, ltrec.rm_flags);
 
-	error = xfs_rmap_get_rec(cur, &ltrec, &have_lt);
-	if (error)
-		goto out_error;
-	XFS_WANT_CORRUPTED_GOTO(mp, have_lt == 1, out_error);
-	trace_xfs_rmap_lookup_le_range_result(cur->bc_mp,
-			cur->bc_private.a.agno, ltrec.rm_startblock,
-			ltrec.rm_blockcount, ltrec.rm_owner,
-			ltrec.rm_offset, ltrec.rm_flags);
-
-	if (!xfs_rmap_is_mergeable(&ltrec, owner, flags))
-		have_lt = 0;
+		if (!xfs_rmap_is_mergeable(&ltrec, owner, flags))
+			have_lt = 0;
+	}
 
 	XFS_WANT_CORRUPTED_GOTO(mp,
 		have_lt == 0 ||
@@ -912,14 +906,8 @@ xfs_rmap_alloc(
 
 	cur = xfs_rmapbt_init_cursor(mp, tp, agbp, agno);
 	error = xfs_rmap_map(cur, bno, len, false, oinfo);
-	if (error)
-		goto out_error;
 
-	xfs_btree_del_cursor(cur, XFS_BTREE_NOERROR);
-	return 0;
-
-out_error:
-	xfs_btree_del_cursor(cur, XFS_BTREE_ERROR);
+	xfs_btree_del_cursor(cur, error);
 	return error;
 }
 
@@ -2156,7 +2144,7 @@ xfs_rmap_finish_one_cleanup(
 	if (rcur == NULL)
 		return;
 	agbp = rcur->bc_private.a.agbp;
-	xfs_btree_del_cursor(rcur, error ? XFS_BTREE_ERROR : XFS_BTREE_NOERROR);
+	xfs_btree_del_cursor(rcur, error);
 	if (error)
 		xfs_trans_brelse(tp, agbp);
 }

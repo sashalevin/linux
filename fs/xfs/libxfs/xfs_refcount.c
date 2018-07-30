@@ -1067,7 +1067,7 @@ xfs_refcount_finish_one_cleanup(
 	if (rcur == NULL)
 		return;
 	agbp = rcur->bc_private.a.agbp;
-	xfs_btree_del_cursor(rcur, error ? XFS_BTREE_ERROR : XFS_BTREE_NOERROR);
+	xfs_btree_del_cursor(rcur, error);
 	if (error)
 		xfs_trans_brelse(tp, agbp);
 }
@@ -1132,7 +1132,7 @@ xfs_refcount_finish_one(
 		if (!agbp)
 			return -EFSCORRUPTED;
 
-		rcur = xfs_refcountbt_init_cursor(mp, tp, agbp, agno, dfops);
+		rcur = xfs_refcountbt_init_cursor(mp, tp, agbp, agno);
 		if (!rcur) {
 			error = -ENOMEM;
 			goto out_cur;
@@ -1666,7 +1666,7 @@ xfs_refcount_recover_cow_leftovers(
 		error = -ENOMEM;
 		goto out_trans;
 	}
-	cur = xfs_refcountbt_init_cursor(mp, tp, agbp, agno, NULL);
+	cur = xfs_refcountbt_init_cursor(mp, tp, agbp, agno);
 
 	/* Find all the leftover CoW staging extents. */
 	memset(&low, 0, sizeof(low));
@@ -1675,11 +1675,11 @@ xfs_refcount_recover_cow_leftovers(
 	high.rc.rc_startblock = -1U;
 	error = xfs_btree_query_range(cur, &low, &high,
 			xfs_refcount_recover_extent, &debris);
-	if (error)
-		goto out_cursor;
-	xfs_btree_del_cursor(cur, XFS_BTREE_NOERROR);
+	xfs_btree_del_cursor(cur, error);
 	xfs_trans_brelse(tp, agbp);
 	xfs_trans_cancel(tp);
+	if (error)
+		goto out_free;
 
 	/* Now iterate the list to free the leftovers */
 	list_for_each_entry_safe(rr, n, &debris, rr_list) {
@@ -1691,19 +1691,19 @@ xfs_refcount_recover_cow_leftovers(
 		trace_xfs_refcount_recover_extent(mp, agno, &rr->rr_rrec);
 
 		/* Free the orphan record */
-		xfs_defer_init(&dfops, &fsb);
+		xfs_defer_init(tp, &dfops);
 		agbno = rr->rr_rrec.rc_startblock - XFS_REFC_COW_START;
 		fsb = XFS_AGB_TO_FSB(mp, agno, agbno);
-		error = xfs_refcount_free_cow_extent(mp, &dfops, fsb,
+		error = xfs_refcount_free_cow_extent(mp, tp->t_dfops, fsb,
 				rr->rr_rrec.rc_blockcount);
 		if (error)
 			goto out_defer;
 
 		/* Free the block. */
-		xfs_bmap_add_free(mp, &dfops, fsb,
+		xfs_bmap_add_free(mp, tp->t_dfops, fsb,
 				rr->rr_rrec.rc_blockcount, NULL);
 
-		error = xfs_defer_finish(&tp, &dfops);
+		error = xfs_defer_finish(&tp, tp->t_dfops);
 		if (error)
 			goto out_defer;
 
@@ -1717,7 +1717,7 @@ xfs_refcount_recover_cow_leftovers(
 
 	return error;
 out_defer:
-	xfs_defer_cancel(&dfops);
+	xfs_defer_cancel(tp->t_dfops);
 out_trans:
 	xfs_trans_cancel(tp);
 out_free:
@@ -1727,11 +1727,6 @@ out_free:
 		kmem_free(rr);
 	}
 	return error;
-
-out_cursor:
-	xfs_btree_del_cursor(cur, XFS_BTREE_ERROR);
-	xfs_trans_brelse(tp, agbp);
-	goto out_trans;
 }
 
 /* Is there a record covering a given extent? */
