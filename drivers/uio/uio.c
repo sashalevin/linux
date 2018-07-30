@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * drivers/uio/uio.c
  *
@@ -9,8 +10,6 @@
  * Userspace IO
  *
  * Base Functions
- *
- * Licensed under the GPLv2 only.
  */
 
 #include <linux/module.h>
@@ -814,7 +813,7 @@ static int uio_mmap(struct file *filep, struct vm_area_struct *vma)
 
 out:
 	mutex_unlock(&idev->info_lock);
-	return 0;
+	return ret;
 }
 
 static const struct file_operations uio_fops = {

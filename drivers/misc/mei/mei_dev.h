@@ -1,7 +1,7 @@
 /*
  *
  * Intel Management Engine Interface (Intel MEI) Linux driver
- * Copyright (c) 2003-2012, Intel Corporation.
+ * Copyright (c) 2003-2018, Intel Corporation.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
@@ -26,7 +26,8 @@
 #include "hw.h"
 #include "hbm.h"
 
-#define MEI_RD_MSG_BUF_SIZE           (128 * sizeof(u32))
+#define MEI_SLOT_SIZE             sizeof(u32)
+#define MEI_RD_MSG_BUF_SIZE       (128 * MEI_SLOT_SIZE)
 
 /*
  * Number of Maximum MEI Clients
@@ -174,7 +175,6 @@ struct mei_cl;
  * @status: io status of the cb
  * @internal: communication between driver and FW flag
  * @blocking: transmission blocking mode
- * @completed: the transfer or reception has completed
  */
 struct mei_cl_cb {
 	struct list_head list;
@@ -186,7 +186,6 @@ struct mei_cl_cb {
 	int status;
 	u32 internal:1;
 	u32 blocking:1;
-	u32 completed:1;
 };
 
 /**
@@ -269,7 +268,7 @@ struct mei_cl {
  *
  * @hbuf_free_slots  : query for write buffer empty slots
  * @hbuf_is_ready    : query if write buffer is empty
- * @hbuf_max_len     : query for write buffer max len
+ * @hbuf_depth       : query for write buffer depth
  *
  * @write            : write a message to FW
  *
@@ -299,7 +298,7 @@ struct mei_hw_ops {
 
 	int (*hbuf_free_slots)(struct mei_device *dev);
 	bool (*hbuf_is_ready)(struct mei_device *dev);
-	size_t (*hbuf_max_len)(const struct mei_device *dev);
+	u32 (*hbuf_depth)(const struct mei_device *dev);
 	int (*write)(struct mei_device *dev,
 		     struct mei_msg_hdr *hdr,
 		     const unsigned char *buf);
@@ -317,7 +316,7 @@ void mei_cl_bus_dev_fixup(struct mei_cl_device *dev);
 ssize_t __mei_cl_send(struct mei_cl *cl, u8 *buf, size_t length,
 		      unsigned int mode);
 ssize_t __mei_cl_recv(struct mei_cl *cl, u8 *buf, size_t length,
-		      unsigned int mode);
+		      unsigned int mode, unsigned long timeout);
 bool mei_cl_bus_rx_event(struct mei_cl *cl);
 bool mei_cl_bus_notify_event(struct mei_cl *cl);
 void mei_cl_bus_remove_devices(struct mei_device *bus);
@@ -355,6 +354,25 @@ enum mei_pg_state {
 const char *mei_pg_state_str(enum mei_pg_state state);
 
 /**
+ * struct mei_fw_version - MEI FW version struct
+ *
+ * @platform: platform identifier
+ * @major: major version field
+ * @minor: minor version field
+ * @buildno: build number version field
+ * @hotfix: hotfix number version field
+ */
+struct mei_fw_version {
+	u8 platform;
+	u8 major;
+	u16 minor;
+	u16 buildno;
+	u16 hotfix;
+};
+
+#define MEI_MAX_FW_VER_BLOCKS 3
+
+/**
  * struct mei_device -  MEI private device struct
  *
  * @dev         : device on a bus
@@ -390,7 +408,6 @@ const char *mei_pg_state_str(enum mei_pg_state state);
  * @rd_msg_buf  : control messages buffer
  * @rd_msg_hdr  : read message header storage
  *
- * @hbuf_depth  : depth of hardware host/write buffer is slots
  * @hbuf_is_ready : query if the host host/write buffer is ready
  *
  * @version     : HBM protocol version in use
@@ -401,6 +418,8 @@ const char *mei_pg_state_str(enum mei_pg_state state);
  * @hbm_f_fa_supported  : hbm feature fixed address client
  * @hbm_f_ie_supported  : hbm feature immediate reply to enum request
  * @hbm_f_os_supported  : hbm feature support OS ver message
+ *
+ * @fw_ver : FW versions
  *
  * @me_clients_rwsem: rw lock over me_clients list
  * @me_clients  : list of FW clients
@@ -466,7 +485,6 @@ struct mei_device {
 	u32 rd_msg_hdr;
 
 	/* write buffer */
-	u8 hbuf_depth;
 	bool hbuf_is_ready;
 
 	struct hbm_version version;
@@ -477,6 +495,8 @@ struct mei_device {
 	unsigned int hbm_f_fa_supported:1;
 	unsigned int hbm_f_ie_supported:1;
 	unsigned int hbm_f_os_supported:1;
+
+	struct mei_fw_version fw_ver[MEI_MAX_FW_VER_BLOCKS];
 
 	struct rw_semaphore me_clients_rwsem;
 	struct list_head me_clients;
@@ -517,7 +537,7 @@ static inline unsigned long mei_secs_to_jiffies(unsigned long sec)
  */
 static inline u32 mei_data2slots(size_t length)
 {
-	return DIV_ROUND_UP(sizeof(struct mei_msg_hdr) + length, 4);
+	return DIV_ROUND_UP(sizeof(struct mei_msg_hdr) + length, MEI_SLOT_SIZE);
 }
 
 /**
@@ -529,7 +549,7 @@ static inline u32 mei_data2slots(size_t length)
  */
 static inline u32 mei_slots2data(int slots)
 {
-	return slots * 4;
+	return slots * MEI_SLOT_SIZE;
 }
 
 /*
@@ -630,9 +650,9 @@ static inline int mei_hbuf_empty_slots(struct mei_device *dev)
 	return dev->ops->hbuf_free_slots(dev);
 }
 
-static inline size_t mei_hbuf_max_len(const struct mei_device *dev)
+static inline u32 mei_hbuf_depth(const struct mei_device *dev)
 {
-	return dev->ops->hbuf_max_len(dev);
+	return dev->ops->hbuf_depth(dev);
 }
 
 static inline int mei_write_message(struct mei_device *dev,

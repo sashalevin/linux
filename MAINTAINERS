@@ -5715,6 +5715,14 @@ F:	drivers/fpga/
 F:	include/linux/fpga/
 W:	http://www.rocketboards.org
 
+FPGA DFL DRIVERS
+M:	Wu Hao <hao.wu@intel.com>
+L:	linux-fpga@vger.kernel.org
+S:	Maintained
+F:	Documentation/fpga/dfl.txt
+F:	include/uapi/linux/fpga-dfl.h
+F:	drivers/fpga/dfl*
+
 FPU EMULATOR
 M:	Bill Metzenthen <billm@melbpc.org.au>
 W:	http://floatingpoint.sourceforge.net/emulator/index.html
@@ -6125,6 +6133,14 @@ S:	Odd Fixes
 F:	Documentation/isdn/README.gigaset
 F:	drivers/isdn/gigaset/
 F:	include/uapi/linux/gigaset_dev.h
+
+GNSS SUBSYSTEM
+M:	Johan Hovold <johan@kernel.org>
+S:	Maintained
+F:	Documentation/ABI/testing/sysfs-class-gnss
+F:	Documentation/devicetree/bindings/gnss/
+F:	drivers/gnss/
+F:	include/linux/gnss.h
 
 GO7007 MPEG CODEC
 M:	Hans Verkuil <hans.verkuil@cisco.com>
@@ -15496,7 +15512,7 @@ F:	include/linux/vme*
 
 VMWARE BALLOON DRIVER
 M:	Xavier Deguillard <xdeguillard@vmware.com>
-M:	Philip Moltmann <moltmann@vmware.com>
+M:	Nadav Amit <namit@vmware.com>
 M:	"VMware, Inc." <pv-drivers@vmware.com>
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
@@ -15588,6 +15604,7 @@ F:	drivers/mmc/host/vub300.c
 W1 DALLAS'S 1-WIRE BUS
 M:	Evgeniy Polyakov <zbr@ioremap.net>
 S:	Maintained
+F:	Documentation/devicetree/bindings/w1/
 F:	Documentation/w1/
 F:	drivers/w1/
 F:	include/linux/w1.h
