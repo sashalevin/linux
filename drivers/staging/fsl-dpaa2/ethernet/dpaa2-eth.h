@@ -369,10 +369,13 @@ struct dpaa2_eth_priv {
 	u64 rx_hash_fields;
 };
 
-/* default Rx hash options, set during probing */
 #define DPAA2_RXH_SUPPORTED	(RXH_L2DA | RXH_VLAN | RXH_L3_PROTO \
 				| RXH_IP_SRC | RXH_IP_DST | RXH_L4_B_0_1 \
 				| RXH_L4_B_2_3)
+
+/* default Rx hash options, set during probing */
+#define DPAA2_RXH_DEFAULT	(RXH_L3_PROTO | RXH_IP_SRC | RXH_IP_DST | \
+				 RXH_L4_B_0_1 | RXH_L4_B_2_3)
 
 #define dpaa2_eth_hash_enabled(priv)	\
 	((priv)->dpni_attrs.num_queues > 1)
@@ -381,7 +384,6 @@ struct dpaa2_eth_priv {
 #define DPAA2_CLASSIFIER_DMA_SIZE 256
 
 extern const struct ethtool_ops dpaa2_ethtool_ops;
-extern const char dpaa2_eth_drv_version[];
 extern int dpaa2_phc_index;
 
 static inline int dpaa2_eth_cmp_dpni_ver(struct dpaa2_eth_priv *priv,

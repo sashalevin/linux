@@ -20,7 +20,6 @@ static u8 bssid[6];
 
 #define IEEE80211_RADIOTAP_F_TX_RTS	0x0004  /* used rts/cts handshake */
 #define IEEE80211_RADIOTAP_F_TX_FAIL	0x0001  /* failed due to excessive*/
-#define GET_PKT_OFFSET(a) (((a) >> 22) & 0x1ff)
 
 #define TX_RADIOTAP_PRESENT ((1 << IEEE80211_RADIOTAP_RATE) |	\
 			     (1 << IEEE80211_RADIOTAP_TX_FLAGS))
@@ -148,7 +147,6 @@ static netdev_tx_t wilc_wfi_mon_xmit(struct sk_buff *skb,
 {
 	u32 rtap_len, ret = 0;
 	struct wilc_wfi_mon_priv  *mon_priv;
-
 	struct sk_buff *skb2;
 	struct wilc_wfi_radiotap_cb_hdr *cb_hdr;
 

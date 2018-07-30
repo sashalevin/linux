@@ -207,8 +207,7 @@
  ********************************************/
 
 struct txq_entry_t {
-	struct txq_entry_t *next;
-	struct txq_entry_t *prev;
+	struct list_head list;
 	int type;
 	int tcp_pending_ack_idx;
 	u8 *buffer;
@@ -219,7 +218,7 @@ struct txq_entry_t {
 };
 
 struct rxq_entry_t {
-	struct rxq_entry_t *next;
+	struct list_head list;
 	u8 *buffer;
 	int buffer_size;
 };
@@ -256,9 +255,6 @@ struct wilc_hif_func {
 #define MAX_CFG_FRAME_SIZE	1468
 
 struct wilc_cfg_frame {
-	u8 ether_header[14];
-	u8 ip_header[20];
-	u8 udp_header[8];
 	u8 wid_header[8];
 	u8 frame[MAX_CFG_FRAME_SIZE];
 };

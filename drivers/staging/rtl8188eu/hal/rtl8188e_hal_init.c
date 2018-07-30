@@ -1,15 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0
 /******************************************************************************
  *
  * Copyright(c) 2007 - 2011 Realtek Corporation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
- * more details.
  *
  ******************************************************************************/
 #define _HAL_INIT_C_
@@ -77,7 +69,6 @@ static s32 iol_InitLLTTable(struct adapter *padapter, u8 txpktbuf_bndy)
 	iol_mode_enable(padapter, 0);
 	return rst;
 }
-
 
 s32 rtl8188e_iol_efuse_patch(struct adapter *padapter)
 {
@@ -407,7 +398,6 @@ static u8 Hal_GetChnlGroup88E(u8 chnl, u8 *pGroup)
 		else if (chnl == 14)		/*  Channel 14 */
 			*pGroup = 5;
 	} else {
-
 		/* probably, this branch is suitable only for 5 GHz */
 
 		bIn24G = false;

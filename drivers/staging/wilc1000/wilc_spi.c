@@ -6,7 +6,6 @@
  */
 
 #include <linux/spi/spi.h>
-#include <linux/of_gpio.h>
 
 #include "wilc_wfi_netdevice.h"
 
@@ -106,44 +105,55 @@ static u8 crc7(u8 crc, const u8 *buffer, u32 len)
 
 static int wilc_bus_probe(struct spi_device *spi)
 {
-	int ret, gpio;
+	int ret;
 	struct wilc *wilc;
+	struct gpio_desc *gpio;
 
-	gpio = of_get_gpio(spi->dev.of_node, 0);
-	if (gpio < 0)
-		gpio = GPIO_NUM;
+	gpio = gpiod_get(&spi->dev, "irq", GPIOD_IN);
+	if (IS_ERR(gpio)) {
+		/* get the GPIO descriptor from hardcode GPIO number */
+		gpio = gpio_to_desc(GPIO_NUM);
+		if (!gpio)
+			dev_err(&spi->dev, "failed to get the irq gpio\n");
+	}
 
-	ret = wilc_netdev_init(&wilc, NULL, HIF_SPI, GPIO_NUM, &wilc_hif_spi);
+	ret = wilc_netdev_init(&wilc, NULL, HIF_SPI, &wilc_hif_spi);
 	if (ret)
 		return ret;
 
 	spi_set_drvdata(spi, wilc);
 	wilc->dev = &spi->dev;
+	wilc->gpio_irq = gpio;
 
 	return 0;
 }
 
 static int wilc_bus_remove(struct spi_device *spi)
 {
-	wilc_netdev_cleanup(spi_get_drvdata(spi));
+	struct wilc *wilc = spi_get_drvdata(spi);
+
+	/* free the GPIO in module remove */
+	if (wilc->gpio_irq)
+		gpiod_put(wilc->gpio_irq);
+	wilc_netdev_cleanup(wilc);
 	return 0;
 }
 
-static const struct of_device_id wilc1000_of_match[] = {
-	{ .compatible = "atmel,wilc_spi", },
-	{}
+static const struct of_device_id wilc_of_match[] = {
+	{ .compatible = "microchip,wilc1000-spi", },
+	{ /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, wilc1000_of_match);
+MODULE_DEVICE_TABLE(of, wilc_of_match);
 
-static struct spi_driver wilc1000_spi_driver = {
+static struct spi_driver wilc_spi_driver = {
 	.driver = {
 		.name = MODALIAS,
-		.of_match_table = wilc1000_of_match,
+		.of_match_table = wilc_of_match,
 	},
 	.probe =  wilc_bus_probe,
 	.remove = wilc_bus_remove,
 };
-module_spi_driver(wilc1000_spi_driver);
+module_spi_driver(wilc_spi_driver);
 MODULE_LICENSE("GPL");
 
 static int wilc_spi_tx(struct wilc *wilc, u8 *b, u32 len)
