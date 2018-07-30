@@ -17,8 +17,10 @@ typedef int (*btf_print_fn_t)(const char *, ...)
 void btf__free(struct btf *btf);
 struct btf *btf__new(__u8 *data, __u32 size, btf_print_fn_t err_log);
 __s32 btf__find_by_name(const struct btf *btf, const char *type_name);
-const struct btf_type *btf__type_by_id(const struct btf *btf, __u32 id);
 __s64 btf__resolve_size(const struct btf *btf, __u32 type_id);
+int btf__resolve_type(const struct btf *btf, __u32 type_id);
 int btf__fd(const struct btf *btf);
+const char *btf__name_by_offset(const struct btf *btf, __u32 offset);
+const struct btf_type *btf__type_by_id(const struct btf *btf, __u32 type_id);
 
 #endif
