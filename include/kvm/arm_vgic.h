@@ -133,6 +133,7 @@ struct vgic_irq {
 	u8 source;			/* GICv2 SGIs only */
 	u8 active_source;		/* GICv2 SGIs only */
 	u8 priority;
+	u8 group;			/* 0 == group 0, 1 == group 1 */
 	enum vgic_irq_config config;	/* Level or edge */
 
 	/*
@@ -216,6 +217,12 @@ struct vgic_dist {
 
 	/* vGIC model the kernel emulates for the guest (GICv2 or GICv3) */
 	u32			vgic_model;
+
+	/* Implementation revision as reported in the GICD_IIDR */
+	u32			implementation_rev;
+
+	/* Userspace can write to GICv2 IGROUPR */
+	bool			v2_groups_user_writable;
 
 	/* Do injected MSIs require an additional device ID? */
 	bool			msis_require_devid;
