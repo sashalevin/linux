@@ -17,6 +17,7 @@
 #include <linux/uuid.h>
 #include <linux/slab.h>
 #include <linux/compat.h>
+#include <linux/proc_ns.h>
 
 #ifdef CONFIG_SYSCTL_SYSCALL
 
@@ -1278,7 +1279,6 @@ static ssize_t binary_sysctl(const int *name, int nlen,
 	void __user *oldval, size_t oldlen, void __user *newval, size_t newlen)
 {
 	const struct bin_table *table = NULL;
-	struct vfsmount *mnt;
 	struct file *file;
 	ssize_t result;
 	char *pathname;
@@ -1301,8 +1301,7 @@ static ssize_t binary_sysctl(const int *name, int nlen,
 		goto out_putname;
 	}
 
-	mnt = task_active_pid_ns(current)->proc_mnt;
-	file = file_open_root(mnt->mnt_root, mnt, pathname, flags, 0);
+	file = file_open_proc(pathname, flags, 0);
 	result = PTR_ERR(file);
 	if (IS_ERR(file))
 		goto out_putname;
