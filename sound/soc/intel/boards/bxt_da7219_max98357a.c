@@ -160,7 +160,7 @@ static int broxton_ssp_fixup(struct snd_soc_pcm_runtime *rtd,
 
 	/* set SSP to 24 bit */
 	snd_mask_none(fmt);
-	snd_mask_set(fmt, SNDRV_PCM_FORMAT_S24_LE);
+	snd_mask_set_format(fmt, SNDRV_PCM_FORMAT_S24_LE);
 
 	return 0;
 }
@@ -586,7 +586,7 @@ static int broxton_audio_probe(struct platform_device *pdev)
 static struct platform_driver broxton_audio = {
 	.probe = broxton_audio_probe,
 	.driver = {
-		.name = "bxt_da7219_max98357a_i2s",
+		.name = "bxt_da7219_max98357a",
 		.pm = &snd_soc_pm_ops,
 	},
 };
@@ -599,4 +599,4 @@ MODULE_AUTHOR("Rohit Ainapure <rohit.m.ainapure@intel.com>");
 MODULE_AUTHOR("Harsha Priya <harshapriya.n@intel.com>");
 MODULE_AUTHOR("Conrad Cooke <conrad.cooke@intel.com>");
 MODULE_LICENSE("GPL v2");
-MODULE_ALIAS("platform:bxt_da7219_max98357a_i2s");
+MODULE_ALIAS("platform:bxt_da7219_max98357a");
