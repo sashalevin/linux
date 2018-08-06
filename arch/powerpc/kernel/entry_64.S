@@ -38,11 +38,13 @@
 #include <asm/ppc-opcode.h>
 #include <asm/barrier.h>
 #include <asm/export.h>
+#include <asm/asm-compat.h>
 #ifdef CONFIG_PPC_BOOK3S
 #include <asm/exception-64s.h>
 #else
 #include <asm/exception-64e.h>
 #endif
+#include <asm/feature-fixups.h>
 
 /*
  * System calls.
@@ -991,6 +993,14 @@ END_FTR_SECTION_IFSET(CPU_FTR_HAS_PPR)
 	clrldi	r4,r4,60
 	or	r4,r4,r3
 	std	r4,_TRAP(r1)
+
+	/*
+	 * PACA_IRQ_HARD_DIS won't always be set here, so set it now
+	 * to reconcile the IRQ state. Tracing is already accounted for.
+	 */
+	lbz	r4,PACAIRQHAPPENED(r13)
+	ori	r4,r4,PACA_IRQ_HARD_DIS
+	stb	r4,PACAIRQHAPPENED(r13)
 
 	/*
 	 * Then find the right handler and call it. Interrupts are

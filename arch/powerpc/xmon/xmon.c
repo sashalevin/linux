@@ -918,13 +918,13 @@ static void remove_cpu_bpts(void)
 static void
 show_uptime(void)
 {
-	struct timespec uptime;
+	struct timespec64 uptime;
 
 	if (setjmp(bus_error_jmp) == 0) {
 		catch_memory_errors = 1;
 		sync();
 
-		get_monotonic_boottime(&uptime);
+		ktime_get_coarse_boottime_ts64(&uptime);
 		printf("Uptime: %lu.%.2lu seconds\n", (unsigned long)uptime.tv_sec,
 			((unsigned long)uptime.tv_nsec / (NSEC_PER_SEC/100)));
 
@@ -2429,7 +2429,6 @@ static void dump_one_paca(int cpu)
 	DUMP(p, thread_idle_state, "%#-*x");
 	DUMP(p, thread_mask, "%#-*x");
 	DUMP(p, subcore_sibling_mask, "%#-*x");
-	DUMP(p, thread_sibling_pacas, "%-*px");
 	DUMP(p, requested_psscr, "%#-*llx");
 	DUMP(p, stop_sprs.pid, "%#-*llx");
 	DUMP(p, stop_sprs.ldbar, "%#-*llx");

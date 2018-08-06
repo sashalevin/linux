@@ -18,6 +18,7 @@
 #include <asm/ptrace.h>
 #include <asm/cpuidle.h>
 #include <asm/head-64.h>
+#include <asm/feature-fixups.h>
 
 /*
  * There are a few constraints to be concerned with.
@@ -276,9 +277,7 @@ BEGIN_FTR_SECTION
 	 *
 	 * This interrupt can wake directly from idle. If that is the case,
 	 * the machine check is handled then the idle wakeup code is called
-	 * to restore state. In that case, the POWER9 DD1 idle PACA workaround
-	 * is not applied in the early machine check code, which will cause
-	 * bugs.
+	 * to restore state.
 	 */
 	mr	r11,r1			/* Save r1 */
 	lhz	r10,PACA_IN_MCE(r13)
@@ -1500,7 +1499,10 @@ masked_##_H##interrupt:					\
 	mfspr	r10,SPRN_##_H##SRR1;			\
 	xori	r10,r10,MSR_EE; /* clear MSR_EE */	\
 	mtspr	SPRN_##_H##SRR1,r10;			\
-2:	mtcrf	0x80,r9;				\
+	ori	r11,r11,PACA_IRQ_HARD_DIS;		\
+	stb	r11,PACAIRQHAPPENED(r13);		\
+2:	/* done */					\
+	mtcrf	0x80,r9;				\
 	std	r1,PACAR1(r13);				\
 	ld	r9,PACA_EXGEN+EX_R9(r13);		\
 	ld	r10,PACA_EXGEN+EX_R10(r13);		\
