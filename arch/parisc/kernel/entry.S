@@ -482,6 +482,8 @@
 	.macro		tlb_unlock0	spc,tmp
 #ifdef CONFIG_SMP
 	or,COND(=)	%r0,\spc,%r0
+	sync
+	or,COND(=)	%r0,\spc,%r0
 	stw             \spc,0(\tmp)
 #endif
 	.endm
@@ -764,7 +766,6 @@ END(fault_vector_11)
 #endif
 	/* Fault vector is separately protected and *must* be on its own page */
 	.align		PAGE_SIZE
-ENTRY(end_fault_vector)
 
 	.import		handle_interruption,code
 	.import		do_cpu_irq_mask,code
@@ -776,7 +777,9 @@ ENTRY(end_fault_vector)
 	 */
 
 ENTRY_CFI(ret_from_kernel_thread)
-
+	.proc
+	.callinfo FRAME=0
+	.entry
 	/* Call schedule_tail first though */
 	BL	schedule_tail, %r2
 	nop
@@ -791,6 +794,8 @@ ENTRY_CFI(ret_from_kernel_thread)
 	copy	%r31, %r2
 	b	finish_child_return
 	nop
+	.exit
+	.procend
 ENDPROC_CFI(ret_from_kernel_thread)
 
 
@@ -815,8 +820,12 @@ ENTRY_CFI(_switch_to)
 	LDREG	TASK_THREAD_INFO(%r25), %r25
 	bv	%r0(%r2)
 	mtctl   %r25,%cr30
+ENDPROC_CFI(_switch_to)
 
-_switch_to_ret:
+ENTRY_CFI(_switch_to_ret)
+	.proc
+	.callinfo FRAME=0
+	.entry
 	mtctl	%r0, %cr0		/* Needed for single stepping */
 	callee_rest
 	callee_rest_float
@@ -824,7 +833,9 @@ _switch_to_ret:
 	LDREG	-RP_OFFSET(%r30), %r2
 	bv	%r0(%r2)
 	copy	%r26, %r28
-ENDPROC_CFI(_switch_to)
+	.exit
+	.procend
+ENDPROC_CFI(_switch_to_ret)
 
 	/*
 	 * Common rfi return path for interruptions, kernel execve, and
@@ -885,12 +896,19 @@ ENTRY_CFI(syscall_exit_rfi)
 	STREG   %r19,PT_SR5(%r16)
 	STREG   %r19,PT_SR6(%r16)
 	STREG   %r19,PT_SR7(%r16)
+ENDPROC_CFI(syscall_exit_rfi)
 
-intr_return:
+ENTRY_CFI(intr_return)
+	.proc
+	.callinfo FRAME=0
+	.entry
 	/* check for reschedule */
 	mfctl   %cr30,%r1
 	LDREG   TI_FLAGS(%r1),%r19	/* sched.h: TIF_NEED_RESCHED */
 	bb,<,n	%r19,31-TIF_NEED_RESCHED,intr_do_resched /* forward */
+	.exit
+	.procend
+ENDPROC_CFI(intr_return)
 
 	.import do_notify_resume,code
 intr_check_sig:
@@ -1046,7 +1064,6 @@ intr_extint:
 
 	b	do_cpu_irq_mask
 	ldo	R%intr_return(%r2), %r2	/* return to intr_return, not here */
-ENDPROC_CFI(syscall_exit_rfi)
 
 
 	/* Generic interruptions (illegal insn, unaligned, page fault, etc) */
@@ -1790,6 +1807,9 @@ ENTRY_CFI(sys_rt_sigreturn_wrapper)
 ENDPROC_CFI(sys_rt_sigreturn_wrapper)
 
 ENTRY_CFI(syscall_exit)
+	.proc
+	.callinfo FRAME=0
+	.entry
 	/* NOTE: Not all syscalls exit this way.  rt_sigreturn will exit
 	 * via syscall_exit_rfi if the signal was received while the process
 	 * was running.
@@ -1988,6 +2008,8 @@ syscall_do_resched:
 #else
 	nop
 #endif
+	.exit
+	.procend
 ENDPROC_CFI(syscall_exit)
 
 
@@ -2086,30 +2108,32 @@ ENDPROC_CFI(return_to_handler)
 /* void call_on_stack(unsigned long param1, void *func,
 		      unsigned long new_stack) */
 ENTRY_CFI(call_on_stack)
+	.proc
+	.callinfo FRAME=2*FRAME_SIZE,CALLS,SAVE_RP,SAVE_SP
+	.entry
 	copy	%sp, %r1
 
 	/* Regarding the HPPA calling conventions for function pointers,
 	   we assume the PIC register is not changed across call.  For
 	   CONFIG_64BIT, the argument pointer is left to point at the
 	   argument region allocated for the call to call_on_stack. */
+
+	/* Switch to new stack.  We allocate two frames.  */
+	ldo	2*FRAME_SIZE(%arg2), %sp
 # ifdef CONFIG_64BIT
-	/* Switch to new stack.  We allocate two 128 byte frames.  */
-	ldo	256(%arg2), %sp
 	/* Save previous stack pointer and return pointer in frame marker */
-	STREG	%rp, -144(%sp)
+	STREG	%rp, -FRAME_SIZE-RP_OFFSET(%sp)
 	/* Calls always use function descriptor */
 	LDREG	16(%arg1), %arg1
 	bve,l	(%arg1), %rp
-	STREG	%r1, -136(%sp)
-	LDREG	-144(%sp), %rp
+	STREG	%r1, -FRAME_SIZE-ASM_ULONG_SIZE(%sp)
+	LDREG	-FRAME_SIZE-RP_OFFSET(%sp), %rp
 	bve	(%rp)
-	LDREG	-136(%sp), %sp
+	LDREG	-FRAME_SIZE-ASM_ULONG_SIZE(%sp), %sp
 # else
-	/* Switch to new stack.  We allocate two 64 byte frames.  */
-	ldo	128(%arg2), %sp
 	/* Save previous stack pointer and return pointer in frame marker */
-	STREG	%r1, -68(%sp)
-	STREG	%rp, -84(%sp)
+	STREG	%r1, -FRAME_SIZE-ASM_ULONG_SIZE(%sp)
+	STREG	%rp, -FRAME_SIZE-RP_OFFSET(%sp)
 	/* Calls use function descriptor if PLABEL bit is set */
 	bb,>=,n	%arg1, 30, 1f
 	depwi	0,31,2, %arg1
@@ -2117,10 +2141,12 @@ ENTRY_CFI(call_on_stack)
 1:
 	be,l	0(%sr4,%arg1), %sr0, %r31
 	copy	%r31, %rp
-	LDREG	-84(%sp), %rp
+	LDREG	-FRAME_SIZE-RP_OFFSET(%sp), %rp
 	bv	(%rp)
-	LDREG	-68(%sp), %sp
+	LDREG	-FRAME_SIZE-ASM_ULONG_SIZE(%sp), %sp
 # endif /* CONFIG_64BIT */
+	.exit
+	.procend
 ENDPROC_CFI(call_on_stack)
 #endif /* CONFIG_IRQSTACKS */
 
