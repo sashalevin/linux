@@ -1779,6 +1779,7 @@ struct ceph_mds_request *
 ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, int mode)
 {
 	struct ceph_mds_request *req = kzalloc(sizeof(*req), GFP_NOFS);
+	struct timespec64 ts;
 
 	if (!req)
 		return ERR_PTR(-ENOMEM);
@@ -1797,7 +1798,8 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, int mode)
 	init_completion(&req->r_safe_completion);
 	INIT_LIST_HEAD(&req->r_unsafe_item);
 
-	req->r_stamp = timespec_trunc(current_kernel_time(), mdsc->fsc->sb->s_time_gran);
+	ktime_get_coarse_real_ts64(&ts);
+	req->r_stamp = timespec64_trunc(ts, mdsc->fsc->sb->s_time_gran);
 
 	req->r_op = op;
 	req->r_direct_mode = mode;
@@ -2094,7 +2096,7 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	/* time stamp */
 	{
 		struct ceph_timespec ts;
-		ceph_encode_timespec(&ts, &req->r_stamp);
+		ceph_encode_timespec64(&ts, &req->r_stamp);
 		ceph_encode_copy(&p, &ts, sizeof(ts));
 	}
 
@@ -2187,7 +2189,7 @@ static int __prepare_send_request(struct ceph_mds_client *mdsc,
 		p = msg->front.iov_base + req->r_request_release_offset;
 		{
 			struct ceph_timespec ts;
-			ceph_encode_timespec(&ts, &req->r_stamp);
+			ceph_encode_timespec64(&ts, &req->r_stamp);
 			ceph_encode_copy(&p, &ts, sizeof(ts));
 		}
 
@@ -2225,7 +2227,7 @@ static int __prepare_send_request(struct ceph_mds_client *mdsc,
 /*
  * send request, or put it on the appropriate wait list.
  */
-static int __do_request(struct ceph_mds_client *mdsc,
+static void __do_request(struct ceph_mds_client *mdsc,
 			struct ceph_mds_request *req)
 {
 	struct ceph_mds_session *session = NULL;
@@ -2235,7 +2237,7 @@ static int __do_request(struct ceph_mds_client *mdsc,
 	if (req->r_err || test_bit(CEPH_MDS_R_GOT_RESULT, &req->r_req_flags)) {
 		if (test_bit(CEPH_MDS_R_ABORTED, &req->r_req_flags))
 			__unregister_request(mdsc, req);
-		goto out;
+		return;
 	}
 
 	if (req->r_timeout &&
@@ -2258,7 +2260,7 @@ static int __do_request(struct ceph_mds_client *mdsc,
 		if (mdsc->mdsmap->m_epoch == 0) {
 			dout("do_request no mdsmap, waiting for map\n");
 			list_add(&req->r_wait, &mdsc->waiting_for_map);
-			goto finish;
+			return;
 		}
 		if (!(mdsc->fsc->mount_options->flags &
 		      CEPH_MOUNT_OPT_MOUNTWAIT) &&
@@ -2276,7 +2278,7 @@ static int __do_request(struct ceph_mds_client *mdsc,
 	    ceph_mdsmap_get_state(mdsc->mdsmap, mds) < CEPH_MDS_STATE_ACTIVE) {
 		dout("do_request no mds or not active, waiting for map\n");
 		list_add(&req->r_wait, &mdsc->waiting_for_map);
-		goto out;
+		return;
 	}
 
 	/* get, open session */
@@ -2326,8 +2328,7 @@ finish:
 		complete_request(mdsc, req);
 		__unregister_request(mdsc, req);
 	}
-out:
-	return err;
+	return;
 }
 
 /*
@@ -2958,15 +2959,12 @@ static int encode_caps_cb(struct inode *inode, struct ceph_cap *cap,
 		rec.v2.flock_len = (__force __le32)
 			((ci->i_ceph_flags & CEPH_I_ERROR_FILELOCK) ? 0 : 1);
 	} else {
-		struct timespec ts;
 		rec.v1.cap_id = cpu_to_le64(cap->cap_id);
 		rec.v1.wanted = cpu_to_le32(__ceph_caps_wanted(ci));
 		rec.v1.issued = cpu_to_le32(cap->issued);
 		rec.v1.size = cpu_to_le64(inode->i_size);
-		ts = timespec64_to_timespec(inode->i_mtime);
-		ceph_encode_timespec(&rec.v1.mtime, &ts);
-		ts = timespec64_to_timespec(inode->i_atime);
-		ceph_encode_timespec(&rec.v1.atime, &ts);
+		ceph_encode_timespec64(&rec.v1.mtime, &inode->i_mtime);
+		ceph_encode_timespec64(&rec.v1.atime, &inode->i_atime);
 		rec.v1.snaprealm = cpu_to_le64(ci->i_snap_realm->ino);
 		rec.v1.pathbase = cpu_to_le64(pathbase);
 	}
@@ -3644,8 +3642,8 @@ int ceph_mdsc_init(struct ceph_fs_client *fsc)
 	init_rwsem(&mdsc->pool_perm_rwsem);
 	mdsc->pool_perm_tree = RB_ROOT;
 
-	strncpy(mdsc->nodename, utsname()->nodename,
-		sizeof(mdsc->nodename) - 1);
+	strscpy(mdsc->nodename, utsname()->nodename,
+		sizeof(mdsc->nodename));
 	return 0;
 }
 
@@ -4019,7 +4017,8 @@ void ceph_mdsc_handle_mdsmap(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	} else {
 		mdsc->mdsmap = newmap;  /* first mds map */
 	}
-	mdsc->fsc->sb->s_maxbytes = mdsc->mdsmap->m_max_file_size;
+	mdsc->fsc->max_file_size = min((loff_t)mdsc->mdsmap->m_max_file_size,
+					MAX_LFS_FILESIZE);
 
 	__wake_requests(mdsc, &mdsc->waiting_for_map);
 	ceph_monc_got_map(&mdsc->fsc->client->monc, CEPH_SUB_MDSMAP,
@@ -4155,6 +4154,16 @@ static struct ceph_auth_handshake *get_authorizer(struct ceph_connection *con,
 	return auth;
 }
 
+static int add_authorizer_challenge(struct ceph_connection *con,
+				    void *challenge_buf, int challenge_buf_len)
+{
+	struct ceph_mds_session *s = con->private;
+	struct ceph_mds_client *mdsc = s->s_mdsc;
+	struct ceph_auth_client *ac = mdsc->fsc->client->monc.auth;
+
+	return ceph_auth_add_authorizer_challenge(ac, s->s_auth.authorizer,
+					    challenge_buf, challenge_buf_len);
+}
 
 static int verify_authorizer_reply(struct ceph_connection *con)
 {
@@ -4218,6 +4227,7 @@ static const struct ceph_connection_operations mds_con_ops = {
 	.put = con_put,
 	.dispatch = dispatch,
 	.get_authorizer = get_authorizer,
+	.add_authorizer_challenge = add_authorizer_challenge,
 	.verify_authorizer_reply = verify_authorizer_reply,
 	.invalidate_authorizer = invalidate_authorizer,
 	.peer_reset = peer_reset,
