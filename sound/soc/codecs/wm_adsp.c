@@ -418,7 +418,7 @@ static const struct wm_adsp_fw_caps ctrl_caps[] = {
 	{
 		.id = SND_AUDIOCODEC_BESPOKE,
 		.desc = {
-			.max_ch = 1,
+			.max_ch = 8,
 			.sample_rates = { 16000 },
 			.num_sample_rates = 1,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE,
@@ -1343,6 +1343,9 @@ static int wm_adsp_create_control(struct wm_adsp *dsp,
 			int avail = SNDRV_CTL_ELEM_ID_NAME_MAXLEN - ret - 2;
 			int skip = 0;
 
+			if (dsp->component->name_prefix)
+				avail -= strlen(dsp->component->name_prefix) + 1;
+
 			if (subname_len > avail)
 				skip = subname_len - avail;
 
@@ -1599,6 +1602,15 @@ static int wm_adsp_parse_coeff(struct wm_adsp *dsp,
 						WMFW_CTL_FLAG_SYS |
 						WMFW_CTL_FLAG_VOLATILE |
 						WMFW_CTL_FLAG_WRITEABLE |
+						WMFW_CTL_FLAG_READABLE,
+						0);
+			if (ret)
+				return -EINVAL;
+			break;
+		case WMFW_CTL_TYPE_HOST_BUFFER:
+			ret = wm_adsp_check_coeff_flags(dsp, &coeff_blk,
+						WMFW_CTL_FLAG_SYS |
+						WMFW_CTL_FLAG_VOLATILE |
 						WMFW_CTL_FLAG_READABLE,
 						0);
 			if (ret)
@@ -1871,9 +1883,11 @@ static void wm_adsp_ctl_fixup_base(struct wm_adsp *dsp,
 }
 
 static void *wm_adsp_read_algs(struct wm_adsp *dsp, size_t n_algs,
+			       const struct wm_adsp_region *mem,
 			       unsigned int pos, unsigned int len)
 {
 	void *alg;
+	unsigned int reg;
 	int ret;
 	__be32 val;
 
@@ -1888,7 +1902,9 @@ static void *wm_adsp_read_algs(struct wm_adsp *dsp, size_t n_algs,
 	}
 
 	/* Read the terminator first to validate the length */
-	ret = regmap_raw_read(dsp->regmap, pos + len, &val, sizeof(val));
+	reg = wm_adsp_region_to_reg(mem, pos + len);
+
+	ret = regmap_raw_read(dsp->regmap, reg, &val, sizeof(val));
 	if (ret != 0) {
 		adsp_err(dsp, "Failed to read algorithm list end: %d\n",
 			ret);
@@ -1897,13 +1913,18 @@ static void *wm_adsp_read_algs(struct wm_adsp *dsp, size_t n_algs,
 
 	if (be32_to_cpu(val) != 0xbedead)
 		adsp_warn(dsp, "Algorithm list end %x 0x%x != 0xbedead\n",
-			  pos + len, be32_to_cpu(val));
+			  reg, be32_to_cpu(val));
 
-	alg = kcalloc(len, 2, GFP_KERNEL | GFP_DMA);
+	/* Convert length from DSP words to bytes */
+	len *= sizeof(u32);
+
+	alg = kzalloc(len, GFP_KERNEL | GFP_DMA);
 	if (!alg)
 		return ERR_PTR(-ENOMEM);
 
-	ret = regmap_raw_read(dsp->regmap, pos, alg, len * 2);
+	reg = wm_adsp_region_to_reg(mem, pos);
+
+	ret = regmap_raw_read(dsp->regmap, reg, alg, len);
 	if (ret != 0) {
 		adsp_err(dsp, "Failed to read algorithm list: %d\n", ret);
 		kfree(alg);
@@ -2002,10 +2023,11 @@ static int wm_adsp1_setup_algs(struct wm_adsp *dsp)
 	if (IS_ERR(alg_region))
 		return PTR_ERR(alg_region);
 
-	pos = sizeof(adsp1_id) / 2;
-	len = (sizeof(*adsp1_alg) * n_algs) / 2;
+	/* Calculate offset and length in DSP words */
+	pos = sizeof(adsp1_id) / sizeof(u32);
+	len = (sizeof(*adsp1_alg) * n_algs) / sizeof(u32);
 
-	adsp1_alg = wm_adsp_read_algs(dsp, n_algs, mem->base + pos, len);
+	adsp1_alg = wm_adsp_read_algs(dsp, n_algs, mem, pos, len);
 	if (IS_ERR(adsp1_alg))
 		return PTR_ERR(adsp1_alg);
 
@@ -2113,10 +2135,11 @@ static int wm_adsp2_setup_algs(struct wm_adsp *dsp)
 	if (IS_ERR(alg_region))
 		return PTR_ERR(alg_region);
 
-	pos = sizeof(adsp2_id) / 2;
-	len = (sizeof(*adsp2_alg) * n_algs) / 2;
+	/* Calculate offset and length in DSP words */
+	pos = sizeof(adsp2_id) / sizeof(u32);
+	len = (sizeof(*adsp2_alg) * n_algs) / sizeof(u32);
 
-	adsp2_alg = wm_adsp_read_algs(dsp, n_algs, mem->base + pos, len);
+	adsp2_alg = wm_adsp_read_algs(dsp, n_algs, mem, pos, len);
 	if (IS_ERR(adsp2_alg))
 		return PTR_ERR(adsp2_alg);
 
@@ -3188,7 +3211,7 @@ static inline int wm_adsp_buffer_write(struct wm_adsp_compr_buf *buf,
 				       buf->host_buf_ptr + field_offset, data);
 }
 
-static int wm_adsp_buffer_locate(struct wm_adsp_compr_buf *buf)
+static int wm_adsp_legacy_host_buf_addr(struct wm_adsp_compr_buf *buf)
 {
 	struct wm_adsp_alg_region *alg_region;
 	struct wm_adsp *dsp = buf->dsp;
@@ -3222,6 +3245,61 @@ static int wm_adsp_buffer_locate(struct wm_adsp_compr_buf *buf)
 	if (!buf->host_buf_ptr)
 		return -EIO;
 
+	adsp_dbg(dsp, "host_buf_ptr=%x\n", buf->host_buf_ptr);
+
+	return 0;
+}
+
+static struct wm_coeff_ctl *
+wm_adsp_find_host_buffer_ctrl(struct wm_adsp_compr_buf *buf)
+{
+	struct wm_adsp *dsp = buf->dsp;
+	struct wm_coeff_ctl *ctl;
+
+	list_for_each_entry(ctl, &dsp->ctl_list, list) {
+		if (ctl->type != WMFW_CTL_TYPE_HOST_BUFFER)
+			continue;
+
+		if (!ctl->enabled)
+			continue;
+
+		return ctl;
+	}
+
+	return NULL;
+}
+
+static int wm_adsp_buffer_locate(struct wm_adsp_compr_buf *buf)
+{
+	struct wm_adsp *dsp = buf->dsp;
+	struct wm_coeff_ctl *ctl;
+	unsigned int reg;
+	u32 val;
+	int i, ret;
+
+	ctl = wm_adsp_find_host_buffer_ctrl(buf);
+	if (!ctl)
+		return wm_adsp_legacy_host_buf_addr(buf);
+
+	ret = wm_coeff_base_reg(ctl, &reg);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < 5; ++i) {
+		ret = regmap_raw_read(dsp->regmap, reg, &val, sizeof(val));
+		if (ret < 0)
+			return ret;
+
+		if (val)
+			break;
+
+		usleep_range(1000, 2000);
+	}
+
+	if (!val)
+		return -EIO;
+
+	buf->host_buf_ptr = be32_to_cpu(val);
 	adsp_dbg(dsp, "host_buf_ptr=%x\n", buf->host_buf_ptr);
 
 	return 0;
