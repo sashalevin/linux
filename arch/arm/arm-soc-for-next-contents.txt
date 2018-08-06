@@ -1,0 +1,220 @@
+next/soc
+	renesas/soc
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-arm-soc-for-v4.19
+	broadcom/soc
+		https://github.com/Broadcom/stblinux tags/arm-soc/for-4.19/soc
+	davinci/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.19/soc
+		contains depends/davinci-clk
+	imx/maintainer
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-maintainer-4.19
+	omap/omap1
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v4.19/omap1-v2-signed
+	omap/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v4.19/soc-signed
+	tegra/firmware
+		git://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-4.19-firmware
+	pxa/soc-v2
+		https://github.com/rjarzmik/linux tags/pxa-for-4.19-v2
+	mvebu/arm
+		git://git.infradead.org/linux-mvebu tags/mvebu-arm-4.19-1
+	hisi/soc
+		git://github.com/hisilicon/linux-hisi tags/hisi-armv7-soc-for-4.19
+	at91/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/abelloni/linux tags/at91-ab-4.19-soc
+	renesas/soc2
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-arm-soc2-for-v4.19
+	imx/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-soc-4.19
+	samsung/soc
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-soc-4.19
+	patch
+		ARM: uniphier: remove empty Makefile
+		arm64: uniphier: select RESET_CONTROLLER
+		ARM: uniphier: select RESET_CONTROLLER
+
+next/dt
+	renesas/arm64-dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-arm64-dt-for-v4.19
+	socfpga/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/dinguyen/linux tags/socfpga_updates_for_v4.19_part1
+	patch
+		arm: dts: highbank: Add missing OPP properties for CPUs
+	keystone/dts
+		git://git.kernel.org/pub/scm/linux/kernel/git/ssantosh/linux-keystone tags/keystone_dts_for_4.19
+	rockchip/dts32
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v4.19-rockchip-dts32-1
+	rockchip/dts64
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v4.19-rockchip-dts64-1
+	broadcom/dt
+		https://github.com/Broadcom/stblinux tags/arm-soc/for-4.19/devicetree
+	broadcom/dt64
+		https://github.com/Broadcom/stblinux tags/arm-soc/for-4.19/devicetree-arm64
+	davinci/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.19/dt
+	omap/dt2
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v4.19/dt-signed-v2
+	omap/dt-mcan
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v4.19/dt-mcan-v2-signed-v2
+		contains omap/ti-sysc
+	tegra/dt-bindings
+		git://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-4.19-dt-bindings
+	tegra/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-4.19-arm-dt
+	tegra/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-4.19-arm64-dt
+	samsung/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-dt-4.19
+	samsung/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-dt64-4.19
+	pxa/dt
+		https://github.com/rjarzmik/linux tags/pxa-dt-4.19
+	mvebu/dt
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt-4.19-1
+	mvebu/dt64
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt64-4.19-1
+	stm32/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/atorgue/stm32 tags/stm32-dt-for-v4.19-1
+	patch
+		ARM: dts: nomadik: Cut FSMC timings
+	rockchip/dt32-fixes
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v4.18-rockchip-dts32fixes-1
+	gemini/dts
+		git://git.kernel.org/pub/scm/linux/kernel/git/linusw/linux-nomadik tags/gemini-dts-v4.19
+	omap/dt2-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v4.19/dt-pt2-signed
+	uniphier/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/masahiroy/linux-uniphier tags/uniphier-dt-v4.19
+	uniphier/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/masahiroy/linux-uniphier tags/uniphier-dt64-v4.19
+	xilinx/dt64
+		https://github.com/Xilinx/linux-xlnx tags/zynqmp-dt-for-v4.19-v2
+	xilinx/dt
+		https://github.com/Xilinx/linux-xlnx tags/zynq-dt-for-v4.19-v2
+	hisi/dt64
+		git://github.com/hisilicon/linux-hisi tags/hisi-arm64-dt-for-4.19v2
+	patch
+		ARM: dts: berlin: Add missing OPP properties for CPUs
+	at91/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/abelloni/linux tags/at91-ab-4.19-dt
+	renesas/dt64-2
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-arm64-dt2-for-v4.19
+	renesas/dt-bindings
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-dt-bindings-for-v4.19
+	amlogic/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-dt64-1
+	imx/dt-clkdep
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-dt-clkdep-4.19
+		contains depends/imx-clk
+	imx/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-dt-4.19
+	imx/dt64
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-dt64-4.19
+	ti/am654
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/am654-for-v4.19-signed
+	qcom/arm64
+		git://git.kernel.org/pub/scm/linux/kernel/git/agross/linux tags/qcom-arm64-for-4.19
+	qcom/dts
+		git://git.kernel.org/pub/scm/linux/kernel/git/agross/linux tags/qcom-dts-for-4.19
+	sprd/dt
+		Merge branch 'sprd/dt' into next/dt
+	renesas/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-arm-dt-for-v4.19
+	amlogic/dt64-2
+		https://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-dt64-2-1
+	omap/dt3
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v4.19/dt-pt3-signed
+	sunxi/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt-for-4.19
+	sunxi/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt64-for-4.19
+	samsung/dt2
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-dt-4.19-2
+	sunxi/h3-h5-dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-h3-h5-for-4.19
+	mediatek/dts32
+		https://git.kernel.org/pub/scm/linux/kernel/git/matthias.bgg/linux tags/v4.18-next-dts32
+	mediatek/dts64
+		https://git.kernel.org/pub/scm/linux/kernel/git/matthias.bgg/linux tags/v4.18-next-dts64
+	aspeed/dt
+		git://git.kernel.org/pub/scm/linux/kernel/git/joel/aspeed tags/aspeed-4.19-devicetree-no-fsi
+	mvebu/dt-2
+		git://git.infradead.org/linux-mvebu tags/mvebu-dt64-4.19-2
+	amlogic/dt64-3
+		https://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-amlogic tags/amlogic-dt64-3
+	rockchip/dts64-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v4.19-rockchip-dts64-2
+	qcom/arm64-2
+		git://git.kernel.org/pub/scm/linux/kernel/git/agross/linux tags/qcom-arm64-for-4.19-2
+		contains qcom/drivers
+
+next/drivers
+	drivers/tee
+		git://git.linaro.org/people/jens.wiklander/linux-tee tags/tee-drv-for-4.18
+	keystone/soc-drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/ssantosh/linux-keystone tags/soc_drivers_for_4.19
+	broadcom/drivers
+		https://github.com/Broadcom/stblinux tags/arm-soc/for-4.19/drivers
+	omap/ti-sysc
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v4.19/ti-sysc-v2-signed
+	tegra/memory
+		git://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-4.19-memory
+	drivers/scmi
+		git://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/scmi-update-4.19
+	drivers/vexpress
+		git://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/vexpress-update-4.19
+	drivers/reset
+		git://git.pengutronix.de/git/pza/linux tags/reset-for-4.19
+	imx/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-drivers-4.19
+	qcom/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/agross/linux tags/qcom-drivers-for-4.19
+	sunxi/drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-drivers-for-4.19
+	fsl/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/leo/linux tags/soc-fsl-for-4.19
+	patch
+		drivers/firmware: psci_checker: stash and use topology_core_cpumask for hotplug tests
+	samsung/drivers-5440
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-drivers-exynos5440-4.19
+	mediatek/soc
+		https://git.kernel.org/pub/scm/linux/kernel/git/matthias.bgg/linux tags/v4.18-next-soc
+
+next/defconfig
+	keystone/config
+		git://git.kernel.org/pub/scm/linux/kernel/git/ssantosh/linux-keystone tags/keystone_config_for_4.19
+	broadcom/defconfig
+		https://github.com/Broadcom/stblinux tags/arm-soc/for-4.19/defconfig
+	broadcom/defconfig64
+		https://github.com/Broadcom/stblinux tags/arm-soc/for-4.19/defconfig-arm64
+	davinci/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/nsekhar/linux-davinci tags/davinci-for-v4.19/defconfig
+	samsung/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-defconfig-4.19
+	stm32/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/atorgue/stm32 tags/stm32-defconfig-for-v4.19-1
+	mvebu/defconfig
+		git://git.infradead.org/linux-mvebu tags/mvebu-defconfig-4.19-1
+	hisi/defconfig
+		git://github.com/hisilicon/linux-hisi tags/hisi-defconfig-for-4.19
+	imx/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-defconfig-4.19
+	renesas/defconfig64
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-arm64-defconfig-for-v4.19
+	qcom/defconfig64
+		git://git.kernel.org/pub/scm/linux/kernel/git/agross/linux tags/qcom-arm64-defconfig-for-4.19
+	qcom/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/agross/linux tags/qcom-defconfig-for-4.19
+	renesas/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/horms/renesas tags/renesas-arm-defconfig-for-v4.19
+	aspeed/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/joel/aspeed tags/aspeed-4.19-defconfig
+	patch
+		ARM: multi_v7_defconfig: add CONFIG_UNIPHIER_THERMAL and CONFIG_SNI_AVE
+	rockchip/defconfig64
+		git://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v4.19-rockchip-defconfig64-1
+
+next/late
+
+fixes
+
