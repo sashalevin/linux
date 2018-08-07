@@ -8,7 +8,10 @@ lkdtm-$(CONFIG_LKDTM)		+= perms.o
 lkdtm-$(CONFIG_LKDTM)		+= refcount.o
 lkdtm-$(CONFIG_LKDTM)		+= rodata_objcopy.o
 lkdtm-$(CONFIG_LKDTM)		+= usercopy.o
+lkdtm-$(CONFIG_LKDTM)		+= stackleak.o
+CFLAGS_stackleak.o		+= $(call cc-disable-warning, vla)
 
+KASAN_SANITIZE_stackleak.o	:= n
 KCOV_INSTRUMENT_rodata.o	:= n
 
 OBJCOPYFLAGS :=
