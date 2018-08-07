@@ -30,6 +30,12 @@
 
 #define NFSDDBG_FACILITY	NFSDDBG_SVC
 
+bool async_copy_offload_enable;
+EXPORT_SYMBOL_GPL(async_copy_offload_enable);
+module_param(async_copy_offload_enable, bool, 0644);
+MODULE_PARM_DESC(async_copy_offload_enable,
+		 "Enable asynch copy offload. Default: false");
+
 extern struct svc_program	nfsd_program;
 static int			nfsd(void *vrqstp);
 
