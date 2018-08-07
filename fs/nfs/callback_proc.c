@@ -215,9 +215,9 @@ static u32 pnfs_check_callback_stateid(struct pnfs_layout_hdr *lo,
 {
 	u32 oldseq, newseq;
 
-	/* Is the stateid still not initialised? */
+	/* Is the stateid not initialised? */
 	if (!pnfs_layout_is_valid(lo))
-		return NFS4ERR_DELAY;
+		return NFS4ERR_NOMATCHING_LAYOUT;
 
 	/* Mismatched stateid? */
 	if (!nfs4_stateid_match_other(&lo->plh_stateid, new))
@@ -273,7 +273,6 @@ static u32 initiate_file_draining(struct nfs_client *clp,
 	rv = pnfs_check_callback_stateid(lo, &args->cbl_stateid);
 	if (rv != NFS_OK)
 		goto unlock;
-	pnfs_set_layout_stateid(lo, &args->cbl_stateid, true);
 
 	/*
 	 * Enforce RFC5661 Section 12.5.5.2.1.5 (Bulk Recall and Return)
@@ -283,19 +282,23 @@ static u32 initiate_file_draining(struct nfs_client *clp,
 		goto unlock;
 	}
 
-	if (pnfs_mark_matching_lsegs_return(lo, &free_me_list,
+	pnfs_set_layout_stateid(lo, &args->cbl_stateid, true);
+	switch (pnfs_mark_matching_lsegs_return(lo, &free_me_list,
 				&args->cbl_range,
 				be32_to_cpu(args->cbl_stateid.seqid))) {
+	case 0:
+	case -EBUSY:
+		/* There are layout segments that need to be returned */
 		rv = NFS4_OK;
-		goto unlock;
-	}
+		break;
+	case -ENOENT:
+		/* Embrace your forgetfulness! */
+		rv = NFS4ERR_NOMATCHING_LAYOUT;
 
-	/* Embrace your forgetfulness! */
-	rv = NFS4ERR_NOMATCHING_LAYOUT;
-
-	if (NFS_SERVER(ino)->pnfs_curr_ld->return_range) {
-		NFS_SERVER(ino)->pnfs_curr_ld->return_range(lo,
-			&args->cbl_range);
+		if (NFS_SERVER(ino)->pnfs_curr_ld->return_range) {
+			NFS_SERVER(ino)->pnfs_curr_ld->return_range(lo,
+				&args->cbl_range);
+		}
 	}
 unlock:
 	spin_unlock(&ino->i_lock);
@@ -328,8 +331,6 @@ static u32 initiate_bulk_draining(struct nfs_client *clp,
 static u32 do_callback_layoutrecall(struct nfs_client *clp,
 				    struct cb_layoutrecallargs *args)
 {
-	write_seqcount_begin(&clp->cl_callback_count);
-	write_seqcount_end(&clp->cl_callback_count);
 	if (args->cbl_recall_type == RETURN_FILE)
 		return initiate_file_draining(clp, args);
 	return initiate_bulk_draining(clp, args);
