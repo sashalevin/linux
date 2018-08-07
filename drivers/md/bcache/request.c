@@ -667,8 +667,7 @@ static void backing_request_endio(struct bio *bio)
 static void bio_complete(struct search *s)
 {
 	if (s->orig_bio) {
-		generic_end_io_acct(s->d->disk->queue,
-				    bio_data_dir(s->orig_bio),
+		generic_end_io_acct(s->d->disk->queue, bio_op(s->orig_bio),
 				    &s->d->disk->part0, s->start_time);
 
 		trace_bcache_request_end(s->d, s->orig_bio);
@@ -702,6 +701,8 @@ static void search_free(struct closure *cl)
 {
 	struct search *s = container_of(cl, struct search, cl);
 
+	atomic_dec(&s->d->c->search_inflight);
+
 	if (s->iop.bio)
 		bio_put(s->iop.bio);
 
@@ -719,6 +720,7 @@ static inline struct search *search_alloc(struct bio *bio,
 
 	closure_init(&s->cl, NULL);
 	do_bio_hook(s, bio, request_endio);
+	atomic_inc(&d->c->search_inflight);
 
 	s->orig_bio		= bio;
 	s->cache_miss		= NULL;
@@ -1062,8 +1064,7 @@ static void detached_dev_end_io(struct bio *bio)
 	bio->bi_end_io = ddip->bi_end_io;
 	bio->bi_private = ddip->bi_private;
 
-	generic_end_io_acct(ddip->d->disk->queue,
-			    bio_data_dir(bio),
+	generic_end_io_acct(ddip->d->disk->queue, bio_op(bio),
 			    &ddip->d->disk->part0, ddip->start_time);
 
 	if (bio->bi_status) {
@@ -1120,7 +1121,7 @@ static blk_qc_t cached_dev_make_request(struct request_queue *q,
 	}
 
 	atomic_set(&dc->backing_idle, 0);
-	generic_start_io_acct(q, rw, bio_sectors(bio), &d->disk->part0);
+	generic_start_io_acct(q, bio_op(bio), bio_sectors(bio), &d->disk->part0);
 
 	bio_set_dev(bio, dc->bdev);
 	bio->bi_iter.bi_sector += dc->sb.data_offset;
@@ -1229,7 +1230,6 @@ static blk_qc_t flash_dev_make_request(struct request_queue *q,
 	struct search *s;
 	struct closure *cl;
 	struct bcache_device *d = bio->bi_disk->private_data;
-	int rw = bio_data_dir(bio);
 
 	if (unlikely(d->c && test_bit(CACHE_SET_IO_DISABLE, &d->c->flags))) {
 		bio->bi_status = BLK_STS_IOERR;
@@ -1237,7 +1237,7 @@ static blk_qc_t flash_dev_make_request(struct request_queue *q,
 		return BLK_QC_T_NONE;
 	}
 
-	generic_start_io_acct(q, rw, bio_sectors(bio), &d->disk->part0);
+	generic_start_io_acct(q, bio_op(bio), bio_sectors(bio), &d->disk->part0);
 
 	s = search_alloc(bio, d);
 	cl = &s->cl;
@@ -1254,7 +1254,7 @@ static blk_qc_t flash_dev_make_request(struct request_queue *q,
 				      flash_dev_nodata,
 				      bcache_wq);
 		return BLK_QC_T_NONE;
-	} else if (rw) {
+	} else if (bio_data_dir(bio)) {
 		bch_keybuf_check_overlapping(&s->iop.c->moving_gc_keys,
 					&KEY(d->id, bio->bi_iter.bi_sector, 0),
 					&KEY(d->id, bio_end_sector(bio), 0));
