@@ -517,7 +517,11 @@ next_step:
 			continue;
 		}
 
-		f2fs_get_node_info(sbi, nid, &ni);
+		if (f2fs_get_node_info(sbi, nid, &ni)) {
+			f2fs_put_page(node_page, 1);
+			continue;
+		}
+
 		if (ni.blk_addr != start_addr + off) {
 			f2fs_put_page(node_page, 1);
 			continue;
@@ -576,7 +580,10 @@ static bool is_alive(struct f2fs_sb_info *sbi, struct f2fs_summary *sum,
 	if (IS_ERR(node_page))
 		return false;
 
-	f2fs_get_node_info(sbi, nid, dni);
+	if (f2fs_get_node_info(sbi, nid, dni)) {
+		f2fs_put_page(node_page, 1);
+		return false;
+	}
 
 	if (sum->version != dni->version) {
 		f2fs_msg(sbi->sb, KERN_WARNING,
@@ -655,7 +662,10 @@ static void move_data_block(struct inode *inode, block_t bidx,
 	 */
 	f2fs_wait_on_page_writeback(page, DATA, true);
 
-	f2fs_get_node_info(fio.sbi, dn.nid, &ni);
+	err = f2fs_get_node_info(fio.sbi, dn.nid, &ni);
+	if (err)
+		goto put_out;
+
 	set_summary(&sum, dn.nid, dn.ofs_in_node, ni.version);
 
 	/* read page */
@@ -874,6 +884,7 @@ next_step:
 			if (!down_write_trylock(
 				&F2FS_I(inode)->i_gc_rwsem[WRITE])) {
 				iput(inode);
+				sbi->skipped_gc_rwsem++;
 				continue;
 			}
 
@@ -903,6 +914,7 @@ next_step:
 					continue;
 				if (!down_write_trylock(
 						&fi->i_gc_rwsem[WRITE])) {
+					sbi->skipped_gc_rwsem++;
 					up_write(&fi->i_gc_rwsem[READ]);
 					continue;
 				}
@@ -986,7 +998,13 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 			goto next;
 
 		sum = page_address(sum_page);
-		f2fs_bug_on(sbi, type != GET_SUM_TYPE((&sum->footer)));
+		if (type != GET_SUM_TYPE((&sum->footer))) {
+			f2fs_msg(sbi->sb, KERN_ERR, "Inconsistent segment (%u) "
+				"type [%d, %d] in SSA and SIT",
+				segno, type, GET_SUM_TYPE((&sum->footer)));
+			set_sbi_flag(sbi, SBI_NEED_FSCK);
+			goto next;
+		}
 
 		/*
 		 * this is to avoid deadlock:
@@ -1046,6 +1064,7 @@ int f2fs_gc(struct f2fs_sb_info *sbi, bool sync,
 				prefree_segments(sbi));
 
 	cpc.reason = __get_cp_reason(sbi);
+	sbi->skipped_gc_rwsem = 0;
 gc_more:
 	if (unlikely(!(sbi->sb->s_flags & SB_ACTIVE))) {
 		ret = -EINVAL;
@@ -1087,7 +1106,8 @@ gc_more:
 	total_freed += seg_freed;
 
 	if (gc_type == FG_GC) {
-		if (sbi->skipped_atomic_files[FG_GC] > last_skipped)
+		if (sbi->skipped_atomic_files[FG_GC] > last_skipped ||
+						sbi->skipped_gc_rwsem)
 			skipped_round++;
 		last_skipped = sbi->skipped_atomic_files[FG_GC];
 		round++;
@@ -1096,15 +1116,23 @@ gc_more:
 	if (gc_type == FG_GC)
 		sbi->cur_victim_sec = NULL_SEGNO;
 
-	if (!sync) {
-		if (has_not_enough_free_secs(sbi, sec_freed, 0)) {
-			if (skipped_round > MAX_SKIP_ATOMIC_COUNT &&
-				skipped_round * 2 >= round)
-				f2fs_drop_inmem_pages_all(sbi, true);
+	if (sync)
+		goto stop;
+
+	if (has_not_enough_free_secs(sbi, sec_freed, 0)) {
+		if (skipped_round <= MAX_SKIP_GC_COUNT ||
+					skipped_round * 2 < round) {
 			segno = NULL_SEGNO;
 			goto gc_more;
 		}
 
+		if (sbi->skipped_atomic_files[FG_GC] == last_skipped &&
+				sbi->skipped_atomic_files[FG_GC] >
+						sbi->skipped_gc_rwsem) {
+			f2fs_drop_inmem_pages_all(sbi, true);
+			segno = NULL_SEGNO;
+			goto gc_more;
+		}
 		if (gc_type == FG_GC)
 			ret = f2fs_write_checkpoint(sbi, &cpc);
 	}
