@@ -2,7 +2,7 @@
 #ifndef __NET_FRAG_H__
 #define __NET_FRAG_H__
 
-#include <linux/rhashtable.h>
+#include <linux/rhashtable-types.h>
 
 struct netns_frags {
 	/* sysctls */
@@ -75,7 +75,8 @@ struct inet_frag_queue {
 	struct timer_list	timer;
 	spinlock_t		lock;
 	refcount_t		refcnt;
-	struct sk_buff		*fragments;
+	struct sk_buff		*fragments;  /* Used in IPv6. */
+	struct rb_root		rb_fragments; /* Used in IPv4. */
 	struct sk_buff		*fragments_tail;
 	ktime_t			stamp;
 	int			len;

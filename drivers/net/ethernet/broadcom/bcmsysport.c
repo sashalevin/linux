@@ -1041,17 +1041,25 @@ static int bcm_sysport_poll(struct napi_struct *napi, int budget)
 	return work_done;
 }
 
-static void bcm_sysport_resume_from_wol(struct bcm_sysport_priv *priv)
+static void mpd_enable_set(struct bcm_sysport_priv *priv, bool enable)
 {
 	u32 reg;
 
+	reg = umac_readl(priv, UMAC_MPD_CTRL);
+	if (enable)
+		reg |= MPD_EN;
+	else
+		reg &= ~MPD_EN;
+	umac_writel(priv, reg, UMAC_MPD_CTRL);
+}
+
+static void bcm_sysport_resume_from_wol(struct bcm_sysport_priv *priv)
+{
 	/* Stop monitoring MPD interrupt */
 	intrl2_0_mask_set(priv, INTRL2_0_MPD);
 
 	/* Clear the MagicPacket detection logic */
-	reg = umac_readl(priv, UMAC_MPD_CTRL);
-	reg &= ~MPD_EN;
-	umac_writel(priv, reg, UMAC_MPD_CTRL);
+	mpd_enable_set(priv, false);
 
 	netif_dbg(priv, wol, priv->netdev, "resumed from WOL\n");
 }
@@ -1102,10 +1110,8 @@ static irqreturn_t bcm_sysport_rx_isr(int irq, void *dev_id)
 	if (priv->irq0_stat & INTRL2_0_TX_RING_FULL)
 		bcm_sysport_tx_reclaim_all(priv);
 
-	if (priv->irq0_stat & INTRL2_0_MPD) {
+	if (priv->irq0_stat & INTRL2_0_MPD)
 		netdev_info(priv->netdev, "Wake-on-LAN interrupt!\n");
-		bcm_sysport_resume_from_wol(priv);
-	}
 
 	if (!priv->is_lite)
 		goto out;
@@ -2107,7 +2113,7 @@ static const struct ethtool_ops bcm_sysport_ethtool_ops = {
 };
 
 static u16 bcm_sysport_select_queue(struct net_device *dev, struct sk_buff *skb,
-				    void *accel_priv,
+				    struct net_device *sb_dev,
 				    select_queue_fallback_t fallback)
 {
 	struct bcm_sysport_priv *priv = netdev_priv(dev);
@@ -2116,7 +2122,7 @@ static u16 bcm_sysport_select_queue(struct net_device *dev, struct sk_buff *skb,
 	unsigned int q, port;
 
 	if (!netdev_uses_dsa(dev))
-		return fallback(dev, skb);
+		return fallback(dev, skb, NULL);
 
 	/* DSA tagging layer will have configured the correct queue */
 	q = BRCM_TAG_GET_QUEUE(queue);
@@ -2124,7 +2130,7 @@ static u16 bcm_sysport_select_queue(struct net_device *dev, struct sk_buff *skb,
 	tx_ring = priv->ring_map[q + port * priv->per_port_num_tx_queues];
 
 	if (unlikely(!tx_ring))
-		return fallback(dev, skb);
+		return fallback(dev, skb, NULL);
 
 	return tx_ring->index;
 }
@@ -2449,9 +2455,7 @@ static int bcm_sysport_suspend_to_wol(struct bcm_sysport_priv *priv)
 
 	/* Do not leave the UniMAC RBUF matching only MPD packets */
 	if (!timeout) {
-		reg = umac_readl(priv, UMAC_MPD_CTRL);
-		reg &= ~MPD_EN;
-		umac_writel(priv, reg, UMAC_MPD_CTRL);
+		mpd_enable_set(priv, false);
 		netif_err(priv, wol, ndev, "failed to enter WOL mode\n");
 		return -ETIMEDOUT;
 	}
