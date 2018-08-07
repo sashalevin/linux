@@ -44,19 +44,15 @@
 #include <linux/mutex.h>
 
 int uverbs_ns_idx(u16 *id, unsigned int ns_count);
-const struct uverbs_object_spec *uverbs_get_object(const struct ib_device *ibdev,
+const struct uverbs_object_spec *uverbs_get_object(struct ib_uverbs_file *ufile,
 						   uint16_t object);
 const struct uverbs_method_spec *uverbs_get_method(const struct uverbs_object_spec *object,
 						   uint16_t method);
-/*
- * These functions initialize the context and cleanups its uobjects.
- * The context has a list of objects which is protected by a mutex
- * on the context. initialize_ucontext should be called when we create
- * a context.
- * cleanup_ucontext removes all uobjects from the context and puts them.
- */
-void uverbs_cleanup_ucontext(struct ib_ucontext *ucontext, bool device_removed);
-void uverbs_initialize_ucontext(struct ib_ucontext *ucontext);
+
+void uverbs_destroy_ufile_hw(struct ib_uverbs_file *ufile,
+			     enum rdma_remove_reason reason);
+
+int uobj_destroy(struct ib_uobject *uobj);
 
 /*
  * uverbs_uobject_get is called in order to increase the reference count on
@@ -82,7 +78,7 @@ void uverbs_uobject_put(struct ib_uobject *uobject);
 void uverbs_close_fd(struct file *f);
 
 /*
- * Get an ib_uobject that corresponds to the given id from ucontext, assuming
+ * Get an ib_uobject that corresponds to the given id from ufile, assuming
  * the object is from the given type. Lock it to the required access when
  * applicable.
  * This function could create (access == NEW), destroy (access == DESTROY)
@@ -90,13 +86,11 @@ void uverbs_close_fd(struct file *f);
  * The action will be finalized only when uverbs_finalize_object or
  * uverbs_finalize_objects are called.
  */
-struct ib_uobject *uverbs_get_uobject_from_context(const struct uverbs_obj_type *type_attrs,
-						   struct ib_ucontext *ucontext,
-						   enum uverbs_obj_access access,
-						   int id);
-int uverbs_finalize_object(struct ib_uobject *uobj,
-			   enum uverbs_obj_access access,
-			   bool commit);
+struct ib_uobject *
+uverbs_get_uobject_from_file(const struct uverbs_obj_type *type_attrs,
+			     struct ib_uverbs_file *ufile,
+			     enum uverbs_obj_access access, s64 id);
+
 /*
  * Note that certain finalize stages could return a status:
  *   (a) alloc_commit could return a failure if the object is committed at the
@@ -112,9 +106,11 @@ int uverbs_finalize_object(struct ib_uobject *uobj,
  * function. For example, this could happen when we couldn't destroy an
  * object.
  */
-int uverbs_finalize_objects(struct uverbs_attr_bundle *attrs_bundle,
-			    struct uverbs_attr_spec_hash * const *spec_hash,
-			    size_t num,
-			    bool commit);
+int uverbs_finalize_object(struct ib_uobject *uobj,
+			   enum uverbs_obj_access access,
+			   bool commit);
+
+void setup_ufile_idr_uobject(struct ib_uverbs_file *ufile);
+void release_ufile_idr_uobject(struct ib_uverbs_file *ufile);
 
 #endif /* RDMA_CORE_H */

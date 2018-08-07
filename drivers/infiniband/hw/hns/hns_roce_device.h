@@ -76,7 +76,7 @@
 /* 4G/4K = 1M */
 #define HNS_ROCE_SL_SHIFT			28
 #define HNS_ROCE_TCLASS_SHIFT			20
-#define HNS_ROCE_FLOW_LABLE_MASK		0xfffff
+#define HNS_ROCE_FLOW_LABEL_MASK		0xfffff
 
 #define HNS_ROCE_MAX_PORTS			6
 #define HNS_ROCE_MAX_GID_NUM			16
@@ -579,22 +579,22 @@ struct hns_roce_ceqe {
 };
 
 struct hns_roce_aeqe {
-	u32 asyn;
+	__le32 asyn;
 	union {
 		struct {
-			u32 qp;
+			__le32 qp;
 			u32 rsv0;
 			u32 rsv1;
 		} qp_event;
 
 		struct {
-			u32 cq;
+			__le32 cq;
 			u32 rsv0;
 			u32 rsv1;
 		} cq_event;
 
 		struct {
-			u32 ceqe;
+			__le32 ceqe;
 			u32 rsv0;
 			u32 rsv1;
 		} ce_event;
@@ -720,6 +720,9 @@ struct hns_roce_caps {
 	u32		eqe_ba_pg_sz;
 	u32		eqe_buf_pg_sz;
 	u32		eqe_hop_num;
+	u32		sl_num;
+	u32		tsq_buf_pg_sz;
+	u32		tpq_buf_pg_sz;
 	u32		chunk_sz;	/* chunk size in non multihop mode*/
 	u64		flags;
 };
@@ -736,7 +739,7 @@ struct hns_roce_hw {
 			 u16 token, int event);
 	int (*chk_mbox)(struct hns_roce_dev *hr_dev, unsigned long timeout);
 	int (*set_gid)(struct hns_roce_dev *hr_dev, u8 port, int gid_index,
-		       union ib_gid *gid, const struct ib_gid_attr *attr);
+		       const union ib_gid *gid, const struct ib_gid_attr *attr);
 	int (*set_mac)(struct hns_roce_dev *hr_dev, u8 phy_port, u8 *addr);
 	void (*set_mtu)(struct hns_roce_dev *hr_dev, u8 phy_port,
 			enum ib_mtu mtu);
@@ -760,10 +763,10 @@ struct hns_roce_hw {
 			 int attr_mask, enum ib_qp_state cur_state,
 			 enum ib_qp_state new_state);
 	int (*destroy_qp)(struct ib_qp *ibqp);
-	int (*post_send)(struct ib_qp *ibqp, struct ib_send_wr *wr,
-			 struct ib_send_wr **bad_wr);
-	int (*post_recv)(struct ib_qp *qp, struct ib_recv_wr *recv_wr,
-			 struct ib_recv_wr **bad_recv_wr);
+	int (*post_send)(struct ib_qp *ibqp, const struct ib_send_wr *wr,
+			 const struct ib_send_wr **bad_wr);
+	int (*post_recv)(struct ib_qp *qp, const struct ib_recv_wr *recv_wr,
+			 const struct ib_recv_wr **bad_recv_wr);
 	int (*req_notify_cq)(struct ib_cq *ibcq, enum ib_cq_notify_flags flags);
 	int (*poll_cq)(struct ib_cq *ibcq, int num_entries, struct ib_wc *wc);
 	int (*dereg_mr)(struct hns_roce_dev *hr_dev, struct hns_roce_mr *mr);
@@ -864,7 +867,7 @@ static inline struct hns_roce_sqp *hr_to_hr_sqp(struct hns_roce_qp *hr_qp)
 	return container_of(hr_qp, struct hns_roce_sqp, hr_qp);
 }
 
-static inline void hns_roce_write64_k(__be32 val[2], void __iomem *dest)
+static inline void hns_roce_write64_k(__le32 val[2], void __iomem *dest)
 {
 	__raw_writeq(*(u64 *) val, dest);
 }
@@ -982,7 +985,7 @@ void hns_roce_qp_remove(struct hns_roce_dev *hr_dev, struct hns_roce_qp *hr_qp);
 void hns_roce_qp_free(struct hns_roce_dev *hr_dev, struct hns_roce_qp *hr_qp);
 void hns_roce_release_range_qp(struct hns_roce_dev *hr_dev, int base_qpn,
 			       int cnt);
-__be32 send_ieth(struct ib_send_wr *wr);
+__be32 send_ieth(const struct ib_send_wr *wr);
 int to_hr_qp_type(int qp_type);
 
 struct ib_cq *hns_roce_ib_create_cq(struct ib_device *ib_dev,
