@@ -184,7 +184,7 @@ struct file *alloc_empty_file_noaccount(int flags, const struct cred *cred)
  * @flags: O_... flags with which the new file will be opened
  * @fop: the 'struct file_operations' for the new file
  */
-struct file *alloc_file(const struct path *path, int flags,
+static struct file *alloc_file(const struct path *path, int flags,
 		const struct file_operations *fop)
 {
 	struct file *file;
@@ -209,7 +209,44 @@ struct file *alloc_file(const struct path *path, int flags,
 		i_readcount_inc(path->dentry->d_inode);
 	return file;
 }
-EXPORT_SYMBOL(alloc_file);
+
+struct file *alloc_file_pseudo(struct inode *inode, struct vfsmount *mnt,
+				const char *name, int flags,
+				const struct file_operations *fops)
+{
+	static const struct dentry_operations anon_ops = {
+		.d_dname = simple_dname
+	};
+	struct qstr this = QSTR_INIT(name, strlen(name));
+	struct path path;
+	struct file *file;
+
+	path.dentry = d_alloc_pseudo(mnt->mnt_sb, &this);
+	if (!path.dentry)
+		return ERR_PTR(-ENOMEM);
+	if (!mnt->mnt_sb->s_d_op)
+		d_set_d_op(path.dentry, &anon_ops);
+	path.mnt = mntget(mnt);
+	d_instantiate(path.dentry, inode);
+	file = alloc_file(&path, flags, fops);
+	if (IS_ERR(file)) {
+		ihold(inode);
+		path_put(&path);
+	}
+	return file;
+}
+EXPORT_SYMBOL(alloc_file_pseudo);
+
+struct file *alloc_file_clone(struct file *base, int flags,
+				const struct file_operations *fops)
+{
+	struct file *f = alloc_file(&base->f_path, flags, fops);
+	if (!IS_ERR(f)) {
+		path_get(&f->f_path);
+		f->f_mapping = base->f_mapping;
+	}
+	return f;
+}
 
 /* the real guts of fput() - releasing the last reference to file
  */
@@ -218,6 +255,7 @@ static void __fput(struct file *file)
 	struct dentry *dentry = file->f_path.dentry;
 	struct vfsmount *mnt = file->f_path.mnt;
 	struct inode *inode = file->f_inode;
+	fmode_t mode = file->f_mode;
 
 	if (unlikely(!(file->f_mode & FMODE_OPENED)))
 		goto out;
@@ -240,17 +278,19 @@ static void __fput(struct file *file)
 	if (file->f_op->release)
 		file->f_op->release(inode, file);
 	if (unlikely(S_ISCHR(inode->i_mode) && inode->i_cdev != NULL &&
-		     !(file->f_mode & FMODE_PATH))) {
+		     !(mode & FMODE_PATH))) {
 		cdev_put(inode->i_cdev);
 	}
 	fops_put(file->f_op);
 	put_pid(file->f_owner.pid);
-	if ((file->f_mode & (FMODE_READ | FMODE_WRITE)) == FMODE_READ)
+	if ((mode & (FMODE_READ | FMODE_WRITE)) == FMODE_READ)
 		i_readcount_dec(inode);
-	if (file->f_mode & FMODE_WRITER) {
+	if (mode & FMODE_WRITER) {
 		put_write_access(inode);
 		__mnt_drop_write(mnt);
 	}
+	if (unlikely(mode & FMODE_NEED_UNMOUNT))
+		dissolve_on_fput(mnt);
 	dput(dentry);
 	mntput(mnt);
 out:

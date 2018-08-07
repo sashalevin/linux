@@ -610,33 +610,21 @@ static struct dentry *hostfs_lookup(struct inode *ino, struct dentry *dentry,
 	int err;
 
 	inode = hostfs_iget(ino->i_sb);
-	if (IS_ERR(inode)) {
-		err = PTR_ERR(inode);
+	if (IS_ERR(inode))
 		goto out;
-	}
 
 	err = -ENOMEM;
 	name = dentry_name(dentry);
-	if (name == NULL)
-		goto out_put;
-
-	err = read_name(inode, name);
-
-	__putname(name);
-	if (err == -ENOENT) {
-		iput(inode);
-		inode = NULL;
+	if (name) {
+		err = read_name(inode, name);
+		__putname(name);
 	}
-	else if (err)
-		goto out_put;
-
-	d_add(dentry, inode);
-	return NULL;
-
- out_put:
-	iput(inode);
+	if (err) {
+		iput(inode);
+		inode = (err == -ENOENT) ? NULL : ERR_PTR(err);
+	}
  out:
-	return ERR_PTR(err);
+	return d_splice_alias(inode, dentry);
 }
 
 static int hostfs_link(struct dentry *to, struct inode *ino,
@@ -923,7 +911,8 @@ static const struct inode_operations hostfs_link_iops = {
 	.get_link	= hostfs_get_link,
 };
 
-static int hostfs_fill_sb_common(struct super_block *sb, void *d, int silent)
+static int hostfs_fill_sb_common(struct super_block *sb,
+				 void *d, size_t data_size, int silent)
 {
 	struct inode *root_inode;
 	char *host_root_path, *req_root = d;
@@ -983,9 +972,9 @@ out:
 
 static struct dentry *hostfs_read_sb(struct file_system_type *type,
 			  int flags, const char *dev_name,
-			  void *data)
+			  void *data, size_t data_size)
 {
-	return mount_nodev(type, flags, data, hostfs_fill_sb_common);
+	return mount_nodev(type, flags, data, data_size, hostfs_fill_sb_common);
 }
 
 static void hostfs_kill_sb(struct super_block *s)

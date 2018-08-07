@@ -832,18 +832,12 @@ cleanup_file:
  * Returns zero on success or -errno if the open failed.
  */
 int finish_open(struct file *file, struct dentry *dentry,
-		int (*open)(struct inode *, struct file *),
-		int *opened)
+		int (*open)(struct inode *, struct file *))
 {
-	int error;
-	BUG_ON(*opened & FILE_OPENED); /* once it's opened, it's opened */
+	BUG_ON(file->f_mode & FMODE_OPENED); /* once it's opened, it's opened */
 
 	file->f_path.dentry = dentry;
-	error = do_dentry_open(file, d_backing_inode(dentry), open);
-	if (!error)
-		*opened |= FILE_OPENED;
-
-	return error;
+	return do_dentry_open(file, d_backing_inode(dentry), open);
 }
 EXPORT_SYMBOL(finish_open);
 
@@ -858,13 +852,13 @@ EXPORT_SYMBOL(finish_open);
  * NB: unlike finish_open() this function does consume the dentry reference and
  * the caller need not dput() it.
  *
- * Returns "1" which must be the return value of ->atomic_open() after having
+ * Returns "0" which must be the return value of ->atomic_open() after having
  * called this function.
  */
 int finish_no_open(struct file *file, struct dentry *dentry)
 {
 	file->f_path.dentry = dentry;
-	return 1;
+	return 0;
 }
 EXPORT_SYMBOL(finish_no_open);
 

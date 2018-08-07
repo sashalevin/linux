@@ -148,8 +148,14 @@ config SAMPLE_VFIO_MDEV_MBOCHS
 
 config SAMPLE_STATX
 	bool "Build example extended-stat using code"
-	depends on BROKEN
+	#depends on BROKEN
 	help
 	  Build example userspace program to use the new extended-stat syscall.
+
+config SAMPLE_MOUNT_API
+	bool "Build example code using the new mount API"
+	depends on BROKEN
+	help
+	  Build example userspace program(s) that use the new mount API.
 
 endif # SAMPLES
