@@ -156,6 +156,7 @@ typedef unsigned __bitwise xa_tag_t;
 #define XA_TAG_2		((__force xa_tag_t)2U)
 #define XA_PRESENT		((__force xa_tag_t)8U)
 #define XA_TAG_MAX		XA_TAG_2
+#define XA_FREE_TAG		XA_TAG_0
 
 enum xa_lock_type {
 	XA_LOCK_IRQ = 1,
@@ -168,6 +169,7 @@ enum xa_lock_type {
  */
 #define XA_FLAGS_LOCK_IRQ	((__force gfp_t)XA_LOCK_IRQ)
 #define XA_FLAGS_LOCK_BH	((__force gfp_t)XA_LOCK_BH)
+#define XA_FLAGS_TRACK_FREE	((__force gfp_t)4U)
 #define XA_FLAGS_TAG(tag)	((__force gfp_t)((1U << __GFP_BITS_SHIFT) << \
 						(__force unsigned)(tag)))
 
@@ -214,12 +216,16 @@ struct xarray {
 #define DEFINE_XARRAY(name) struct xarray name = XARRAY_INIT(name)
 #define DEFINE_XARRAY_FLAGS(name, flags) \
 			struct xarray name = XARRAY_INIT_FLAGS(name, flags)
+#define DEFINE_XARRAY_ALLOC(name)					\
+	struct xarray name = XARRAY_INIT_FLAGS(name,			\
+			XA_FLAGS_TAG(XA_FREE_TAG) | XA_FLAGS_TRACK_FREE)
 
 void xa_init_flags(struct xarray *, gfp_t flags);
 void *xa_load(struct xarray *, unsigned long index);
 void *xa_store(struct xarray *, unsigned long index, void *entry, gfp_t);
 void *xa_cmpxchg(struct xarray *, unsigned long index,
 			void *old, void *entry, gfp_t);
+int xa_alloc(struct xarray *, u32 *id, u32 max, void *entry, gfp_t);
 bool xa_get_tag(struct xarray *, unsigned long index, xa_tag_t);
 void xa_set_tag(struct xarray *, unsigned long index, xa_tag_t);
 void xa_clear_tag(struct xarray *, unsigned long index, xa_tag_t);

@@ -293,10 +293,10 @@ static void dump_ida_node(void *entry, unsigned long index)
 
 static void ida_dump(struct ida *ida)
 {
-	struct radix_tree_root *root = &ida->ida_rt;
-	pr_debug("ida: %p node %p free %d\n", ida, root->xa_head,
-				root->xa_flags >> ROOT_TAG_SHIFT);
-	dump_ida_node(root->xa_head, 0);
+	struct xarray *xa = &ida->xa;
+	pr_debug("ida: %p node %p free %d\n", ida, xa->xa_head,
+				xa->xa_flags >> ROOT_TAG_SHIFT);
+	dump_ida_node(xa->xa_head, 0);
 }
 #endif
 
@@ -1743,36 +1743,6 @@ void idr_preload(gfp_t gfp_mask)
 }
 EXPORT_SYMBOL(idr_preload);
 
-/**
- * ida_pre_get - reserve resources for ida allocation
- * @ida: ida handle
- * @gfp: memory allocation flags
- *
- * This function should be called before calling ida_get_new_above().  If it
- * is unable to allocate memory, it will return %0.  On success, it returns %1.
- */
-int ida_pre_get(struct ida *ida, gfp_t gfp)
-{
-	/*
-	 * The IDA API has no preload_end() equivalent.  Instead,
-	 * ida_get_new() can return -EAGAIN, prompting the caller
-	 * to return to the ida_pre_get() step.
-	 */
-	if (!__radix_tree_preload(gfp, IDA_PRELOAD_SIZE))
-		preempt_enable();
-
-	if (!this_cpu_read(ida_bitmap)) {
-		struct ida_bitmap *bitmap = kzalloc(sizeof(*bitmap), gfp);
-		if (!bitmap)
-			return 0;
-		if (this_cpu_cmpxchg(ida_bitmap, NULL, bitmap))
-			kfree(bitmap);
-	}
-
-	return 1;
-}
-EXPORT_SYMBOL(ida_pre_get);
-
 void __rcu **idr_get_free(struct radix_tree_root *root,
 			      struct radix_tree_iter *iter, gfp_t gfp,
 			      unsigned long max)
@@ -1889,8 +1859,6 @@ static int radix_tree_cpu_dead(unsigned int cpu)
 		kmem_cache_free(radix_tree_node_cachep, node);
 		rtp->nr--;
 	}
-	kfree(per_cpu(ida_bitmap, cpu));
-	per_cpu(ida_bitmap, cpu) = NULL;
 	return 0;
 }
 

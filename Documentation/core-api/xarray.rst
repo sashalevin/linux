@@ -94,14 +94,22 @@ Finally, you can remove all entries from an XArray by calling
 to free the entries first.  You can do this by iterating over all present
 entries in the XArray using the :c:func:`xa_for_each` iterator.
 
+ID assignment
+-------------
+
+If you define your XArray with DEFINE_XARRAY_ALLOC, or pass the appropriate
+flags to :c:func:`xarray_init_flags`, you can call :c:func:`xa_alloc` to
+store the entry in any empty slot in the XArray.  This replaces most of
+the functionality of the IDR.
+
 Memory allocation
 -----------------
 
-The :c:func:`xa_store`, :c:func:`xa_cmpxchg`, :c:func:`xa_reserve`
-and :c:func:`xa_insert` functions take a gfp_t parameter in case
-the XArray needs to allocate memory to store this entry.  If the entry
-being stored is ``NULL``, no memory allocation needs to be performed,
-and the GFP flags specified will be ignored.
+The :c:func:`xa_store`, :c:func:`xa_cmpxchg`, :c:func:`xa_alloc`,
+:c:func:`xa_reserve` and :c:func:`xa_insert` functions take a gfp_t
+parameter in case the XArray needs to allocate memory to store this entry.
+If the entry being stored is ``NULL``, no memory allocation needs to be
+performed, and the GFP flags specified will be ignored.
 
 It is possible for no memory to be allocatable, particularly if you pass
 a restrictive set of GFP flags.  In that case, the functions return a
@@ -132,6 +140,7 @@ Takes xa_lock internally:
  * :c:func:`xa_insert`
  * :c:func:`xa_erase`
  * :c:func:`xa_cmpxchg`
+ * :c:func:`xa_alloc`
  * :c:func:`xa_destroy`
  * :c:func:`xa_set_tag`
  * :c:func:`xa_clear_tag`
