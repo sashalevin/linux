@@ -28,6 +28,8 @@
 
 /*----------------------------------------------------------------*/
 
+#define DM_CACHE_FEATURE_INCOMPAT_SEP_DIRTY_BITS	  0x0001
+
 /*
  * Ext[234]-style compat feature flags.
  *
@@ -48,7 +50,7 @@
 
 #define DM_CACHE_FEATURE_COMPAT_SUPP	  0UL
 #define DM_CACHE_FEATURE_COMPAT_RO_SUPP	  0UL
-#define DM_CACHE_FEATURE_INCOMPAT_SUPP	  0UL
+#define DM_CACHE_FEATURE_INCOMPAT_SUPP	  DM_CACHE_FEATURE_INCOMPAT_SEP_DIRTY_BITS
 
 struct dm_cache_metadata;
 
