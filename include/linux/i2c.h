@@ -140,9 +140,14 @@ extern int __i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs,
    and probably just as fast.
    Note that we use i2c_adapter here, because you do not need a specific
    smbus adapter to call this function. */
-extern s32 i2c_smbus_xfer(struct i2c_adapter *adapter, u16 addr,
-			  unsigned short flags, char read_write, u8 command,
-			  int size, union i2c_smbus_data *data);
+s32 i2c_smbus_xfer(struct i2c_adapter *adapter, u16 addr,
+		   unsigned short flags, char read_write, u8 command,
+		   int protocol, union i2c_smbus_data *data);
+
+/* Unlocked flavor */
+s32 __i2c_smbus_xfer(struct i2c_adapter *adapter, u16 addr,
+		     unsigned short flags, char read_write, u8 command,
+		     int protocol, union i2c_smbus_data *data);
 
 /* Now follow the 'nice' access routines. These also document the calling
    conventions of i2c_smbus_xfer. */
@@ -576,12 +581,14 @@ struct i2c_timings {
  *      recovery. Populated internally for generic GPIO recovery.
  * @set_scl: This sets/clears the SCL line. Mandatory for generic SCL recovery.
  *      Populated internally for generic GPIO recovery.
- * @get_sda: This gets current value of SDA line. Optional for generic SCL
- *      recovery. Populated internally, if sda_gpio is a valid GPIO, for generic
- *      GPIO recovery.
- * @set_sda: This sets/clears the SDA line. Optional for generic SCL recovery.
- *	Populated internally, if sda_gpio is a valid GPIO, for generic GPIO
- *	recovery.
+ * @get_sda: This gets current value of SDA line. This or set_sda() is mandatory
+ *	for generic SCL recovery. Populated internally, if sda_gpio is a valid
+ *	GPIO, for generic GPIO recovery.
+ * @set_sda: This sets/clears the SDA line. This or get_sda() is mandatory for
+ *	generic SCL recovery. Populated internally, if sda_gpio is a valid GPIO,
+ *	for generic GPIO recovery.
+ * @get_bus_free: Returns the bus free state as seen from the IP core in case it
+ *	has a more complex internal logic than just reading SDA. Optional.
  * @prepare_recovery: This will be called before starting recovery. Platform may
  *	configure padmux here for SDA/SCL line or something else they want.
  * @unprepare_recovery: This will be called after completing recovery. Platform
@@ -596,6 +603,7 @@ struct i2c_bus_recovery_info {
 	void (*set_scl)(struct i2c_adapter *adap, int val);
 	int (*get_sda)(struct i2c_adapter *adap);
 	void (*set_sda)(struct i2c_adapter *adap, int val);
+	int (*get_bus_free)(struct i2c_adapter *adap);
 
 	void (*prepare_recovery)(struct i2c_adapter *adap);
 	void (*unprepare_recovery)(struct i2c_adapter *adap);
@@ -653,6 +661,10 @@ struct i2c_adapter_quirks {
 					 I2C_AQ_COMB_READ_SECOND | I2C_AQ_COMB_SAME_ADDR)
 /* clock stretching is not supported */
 #define I2C_AQ_NO_CLK_STRETCH		BIT(4)
+/* message cannot have length of 0 */
+#define I2C_AQ_NO_ZERO_LEN_READ		BIT(5)
+#define I2C_AQ_NO_ZERO_LEN_WRITE	BIT(6)
+#define I2C_AQ_NO_ZERO_LEN		(I2C_AQ_NO_ZERO_LEN_READ | I2C_AQ_NO_ZERO_LEN_WRITE)
 
 /*
  * i2c_adapter is the structure used to identify a physical i2c bus along
@@ -752,18 +764,6 @@ static inline void
 i2c_unlock_bus(struct i2c_adapter *adapter, unsigned int flags)
 {
 	adapter->lock_ops->unlock_bus(adapter, flags);
-}
-
-static inline void
-i2c_lock_adapter(struct i2c_adapter *adapter)
-{
-	i2c_lock_bus(adapter, I2C_LOCK_ROOT_ADAPTER);
-}
-
-static inline void
-i2c_unlock_adapter(struct i2c_adapter *adapter)
-{
-	i2c_unlock_bus(adapter, I2C_LOCK_ROOT_ADAPTER);
 }
 
 /*flags for the client struct: */
