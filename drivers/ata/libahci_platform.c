@@ -351,7 +351,7 @@ struct ahci_host_priv *ahci_platform_get_resources(struct platform_device *pdev)
 	struct ahci_host_priv *hpriv;
 	struct clk *clk;
 	struct device_node *child;
-	int i, sz, enabled_ports = 0, rc = -ENOMEM, child_nodes;
+	int i, enabled_ports = 0, rc = -ENOMEM, child_nodes;
 	u32 mask_port_map = 0;
 
 	if (!devres_open_group(dev, NULL, GFP_KERNEL))
@@ -403,14 +403,16 @@ struct ahci_host_priv *ahci_platform_get_resources(struct platform_device *pdev)
 	if (!child_nodes)
 		hpriv->nports = 1;
 
-	sz = hpriv->nports * sizeof(*hpriv->phys);
-	hpriv->phys = devm_kzalloc(dev, sz, GFP_KERNEL);
+	hpriv->phys = devm_kcalloc(dev, hpriv->nports, sizeof(*hpriv->phys), GFP_KERNEL);
 	if (!hpriv->phys) {
 		rc = -ENOMEM;
 		goto err_out;
 	}
-	sz = hpriv->nports * sizeof(*hpriv->target_pwrs);
-	hpriv->target_pwrs = kzalloc(sz, GFP_KERNEL);
+	/*
+	 * We cannot use devm_ here, since ahci_platform_put_resources() uses
+	 * target_pwrs after devm_ have freed memory
+	 */
+	hpriv->target_pwrs = kcalloc(hpriv->nports, sizeof(*hpriv->target_pwrs), GFP_KERNEL);
 	if (!hpriv->target_pwrs) {
 		rc = -ENOMEM;
 		goto err_out;
@@ -605,7 +607,7 @@ static void ahci_host_stop(struct ata_host *host)
 
 /**
  * ahci_platform_shutdown - Disable interrupts and stop DMA for host ports
- * @dev: platform device pointer for the host
+ * @pdev: platform device pointer for the host
  *
  * This function is called during system shutdown and performs the minimal
  * deconfiguration required to ensure that an ahci_platform host cannot
