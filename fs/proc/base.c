@@ -3021,7 +3021,7 @@ static const struct inode_operations proc_tgid_base_inode_operations = {
 	.permission	= proc_pid_permission,
 };
 
-static void proc_flush_task_mnt(struct vfsmount *mnt, pid_t pid, pid_t tgid)
+static void proc_flush_task_root(struct dentry *proc_root, pid_t pid, pid_t tgid)
 {
 	struct dentry *dentry, *leader, *dir;
 	char buf[10 + 1];
@@ -3030,7 +3030,7 @@ static void proc_flush_task_mnt(struct vfsmount *mnt, pid_t pid, pid_t tgid)
 	name.name = buf;
 	name.len = snprintf(buf, sizeof(buf), "%u", pid);
 	/* no ->d_hash() rejects on procfs */
-	dentry = d_hash_and_lookup(mnt->mnt_root, &name);
+	dentry = d_hash_and_lookup(proc_root, &name);
 	if (dentry) {
 		d_invalidate(dentry);
 		dput(dentry);
@@ -3041,7 +3041,7 @@ static void proc_flush_task_mnt(struct vfsmount *mnt, pid_t pid, pid_t tgid)
 
 	name.name = buf;
 	name.len = snprintf(buf, sizeof(buf), "%u", tgid);
-	leader = d_hash_and_lookup(mnt->mnt_root, &name);
+	leader = d_hash_and_lookup(proc_root, &name);
 	if (!leader)
 		goto out;
 
@@ -3071,8 +3071,8 @@ out:
  * @task: task that should be flushed.
  *
  * When flushing dentries from proc, one needs to flush them from global
- * proc (proc_mnt) and from all the namespaces' procs this task was seen
- * in. This call is supposed to do all of this job.
+ * proc and from all the namespaces' procs this task was seen in. This call
+ * is supposed to do all of this job.
  *
  * Looks in the dcache for
  * /proc/@pid
@@ -3096,15 +3096,37 @@ void proc_flush_task(struct task_struct *task)
 	int i;
 	struct pid *pid, *tgid;
 	struct upid *upid;
+	int expected = 1;
 
 	pid = task_pid(task);
 	tgid = task_tgid(task);
-
-	for (i = 0; i <= pid->level; i++) {
-		upid = &pid->numbers[i];
-		proc_flush_task_mnt(upid->ns->proc_mnt, upid->nr,
-					tgid->numbers[i].nr);
+	if (thread_group_leader(task)) {
+		if (task_pgrp(task) == pid)
+			expected++;
+		if (task_session(task) == pid)
+			expected++;
 	}
+
+	/* Nothing to do if proc inodes have not take a reference to pid */
+	if (atomic_read(&pid->count) == expected)
+		return;
+
+	rcu_read_lock();
+	for (i = 0; i <= pid->level; i++) {
+		struct super_block *sb;
+		upid = &pid->numbers[i];
+
+		sb = rcu_dereference(upid->ns->proc_super);
+		if (!sb || !atomic_inc_not_zero(&sb->s_active))
+			continue;
+		rcu_read_unlock();
+
+		proc_flush_task_root(sb->s_root, upid->nr, tgid->numbers[i].nr);
+		deactivate_super(sb);
+
+		rcu_read_lock();
+	}
+	rcu_read_unlock();
 }
 
 static struct dentry *proc_pid_instantiate(struct dentry * dentry,

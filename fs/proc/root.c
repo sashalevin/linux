@@ -145,7 +145,10 @@ static int proc_fill_super(struct super_block *s, struct fs_context *fc)
 	if (ret) {
 		return ret;
 	}
-	return proc_setup_thread_self(s);
+	ret = proc_setup_thread_self(s);
+
+	rcu_assign_pointer(pid_ns->proc_super, s);
+	return ret;
 }
 
 int proc_reconfigure(struct super_block *sb, struct fs_context *fc)
@@ -201,6 +204,7 @@ static void proc_kill_sb(struct super_block *sb)
 	struct pid_namespace *ns;
 
 	ns = (struct pid_namespace *)sb->s_fs_info;
+	rcu_assign_pointer(ns->proc_super, NULL);
 	if (ns->proc_self)
 		dput(ns->proc_self);
 	if (ns->proc_thread_self)
@@ -303,41 +307,19 @@ struct proc_dir_entry proc_root = {
 	.name		= "/proc",
 };
 
-int pid_ns_prepare_proc(struct pid_namespace *ns)
+#if defined(CONFIG_SYSCTL_SYSCALL) || defined(CONFIG_MCONSOLE)
+struct file *file_open_proc(const char *pathname, int flags, umode_t mode)
 {
-	struct proc_fs_context *ctx;
-	struct fs_context *fc;
 	struct vfsmount *mnt;
-	int ret;
+	struct file *file;
 
-	fc = vfs_new_fs_context(&proc_fs_type, NULL, 0,
-				FS_CONTEXT_FOR_KERNEL_MOUNT);
-	if (IS_ERR(fc))
-		return PTR_ERR(fc);
-
-	ctx = fc->fs_private;
-	if (ctx->pid_ns != ns) {
-		put_pid_ns(ctx->pid_ns);
-		get_pid_ns(ns);
-		ctx->pid_ns = ns;
-	}
-
-	ret = vfs_get_tree(fc);
-	if (ret < 0) {
-		put_fs_context(fc);
-		return ret;
-	}
-
-	mnt = vfs_create_mount(fc, 0);
-	put_fs_context(fc);
+	mnt = kern_mount(&proc_fs_type);
 	if (IS_ERR(mnt))
-		return PTR_ERR(mnt);
+		return ERR_CAST(mnt);
 
-	ns->proc_mnt = mnt;
-	return 0;
-}
+	file = file_open_root(mnt->mnt_root, mnt, pathname, flags, mode);
+	kern_unmount(mnt);
 
-void pid_ns_release_proc(struct pid_namespace *ns)
-{
-	kern_unmount(ns->proc_mnt);
+	return file;
 }
+#endif
