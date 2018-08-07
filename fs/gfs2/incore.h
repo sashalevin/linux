@@ -295,7 +295,6 @@ struct gfs2_blkreserv {
 	struct rb_node rs_node;       /* link to other block reservations */
 	struct gfs2_rbm rs_rbm;       /* Start of reservation */
 	u32 rs_free;                  /* how many blocks are still free */
-	u64 rs_inum;                  /* Inode number for reservation */
 };
 
 /*
@@ -398,7 +397,6 @@ struct gfs2_inode {
 	struct gfs2_holder i_gh; /* for prepare/commit_write only */
 	struct gfs2_qadata *i_qadata; /* quota allocation data */
 	struct gfs2_blkreserv i_res; /* rgrp multi-block reservation */
-	struct gfs2_rgrpd *i_rgd;
 	u64 i_goal;	/* goal block for allocations */
 	struct rw_semaphore i_rw_mutex;
 	struct list_head i_ordered;
